@@ -82,15 +82,21 @@
     </div>
 <script>
     const S = 9;
+    // URL базы данных жестко зафиксирован
     const DB_URL = "https://firebasedatabase.app";
     let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
     let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null;
 
-    // Сверхнадёжная HTTP-функция, которая без проблем запускается прямо с диска ПК
+    // СЕТЕВАЯ ФУНКЦИЯ С ИСПРАВЛЕННЫМ АДРЕСНЫМ ПУТЕМ ДЛЯ ЕВРОПЕЙСКИХ СЕРВЕРОВ
     async function fbRequest(path, method = "GET", data = null) {
-        let options = { method, headers: { "Content-Type": "application/json" } };
+        let options = { 
+            method, 
+            mode: "cors", 
+            headers: { "Content-Type": "application/json", "Accept": "application/json" } 
+        };
         if (data) options.body = JSON.stringify(data);
-        let res = await fetch(`${DB_URL}${path}.json`, options);
+        // Запрос теперь собирается строго через разделительный слеш: URL / путь .json
+        let res = await fetch(`${DB_URL}/${path}.json`, options);
         return res.json();
     }
 
@@ -106,13 +112,13 @@
             const state = { p1: { r: S - 1, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false };
             await fbRequest(`rooms/${roomId}`, "PUT", state);
             startOnlineGame();
-        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка соединения с базой!"; }
+        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка сети! Проверьте вкладку Rules в Firebase."; }
     }
 
     window.joinExistingRoom = async function() {
         let inputId = document.getElementById('room-input').value.trim().toUpperCase();
         if(!inputId) { mStatus.innerText = "Введите код комнаты!"; return; }
-        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Код должен быть из 5 латинских букв или цифр."; return; }
+        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Формат: 5 латинских букв или цифр."; return; }
 
         mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка комнаты...";
         try {
