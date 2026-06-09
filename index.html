@@ -45,12 +45,12 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-card">
             <h1>Коридор Онлайн</h1>
-            <button class="btn-main" onclick="window.createNewRoom()">🏠 Создать новую комнату</button>
+            <button class="btn-main" onclick="createNewRoom()">🏠 Создать новую комнату</button>
             <div style="margin: 15px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
             <div class="setting-row">
                 <input type="text" id="room-input" placeholder="ВВЕДИТЕ ID КОМНАТЫ">
             </div>
-            <button class="btn-main" style="background: #2ecc71;" onclick="window.joinExistingRoom()">⚔️ Войти в комнату</button>
+            <button class="btn-main" style="background: #2ecc71;" onclick="joinExistingRoom()">⚔️ Войти в комнату</button>
             <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
         </div>
     </div>
@@ -63,8 +63,8 @@
         </div>
         <div id="board"></div>
         <div id="controls">
-            <button id="btn-wall-h" onclick="window.toggleWallMode('wall-h')">➖ Горизонтальная</button>
-            <button id="btn-wall-v" onclick="window.toggleWallMode('wall-v')">┃ Вертикальная</button>
+            <button id="btn-wall-h" onclick="toggleWallMode('wall-h')">➖ Горизонтальная</button>
+            <button id="btn-wall-v" onclick="toggleWallMode('wall-v')">┃ Вертикальная</button>
             <button id="btn-menu" style="background:#e74c3c; color:white;" onclick="location.reload()">🚪 Выйти</button>
         </div>
     </div>
@@ -80,130 +80,123 @@
             <button class="btn-main" onclick="location.reload()">В главное меню</button>
         </div>
     </div>
+<script>
+    const S = 9;
+    const DB_URL = "https://firebasedatabase.app";
+    let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
+    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null;
 
-    <!-- Загружаем официальные скрипты Firebase SDK, которые одобряет GitHub Pages -->
-    <script type="module">
-        import { initializeApp } from "https://gstatic.com";
-        import { getDatabase, ref, set, onValue, update, get } from "https://gstatic.com";
+    // Сверхнадёжная HTTP-функция, которая без проблем запускается прямо с диска ПК
+    async function fbRequest(path, method = "GET", data = null) {
+        let options = { method, headers: { "Content-Type": "application/json" } };
+        if (data) options.body = JSON.stringify(data);
+        let res = await fetch(`${DB_URL}${path}.json`, options);
+        return res.json();
+    }
 
-        const firebaseConfig = {
-            projectId: "quoridor-online-859f5",
-            databaseURL: "https://firebasedatabase.app"
-        };
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const S = 9;
-        let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
-        let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "";
+    function generateLatinId() {
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let res = "";
+        for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+        return res;
+    }
 
-        function generateLatinId() {
-            const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let res = "";
-            for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length)); return res;
-        }
+    window.createNewRoom = async function() {
+        roomId = generateLatinId(); myRole = 1; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание комнаты...";
+        try {
+            const state = { p1: { r: S - 1, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false };
+            await fbRequest(`rooms/${roomId}`, "PUT", state);
+            startOnlineGame();
+        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка соединения с базой!"; }
+    }
 
-        window.createNewRoom = async function() {
-            roomId = generateLatinId(); myRole = 1; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание комнаты...";
-            try {
-                const state = { p1: { r: S - 1, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false };
-                await set(ref(db, 'rooms/' + roomId), state);
+    window.joinExistingRoom = async function() {
+        let inputId = document.getElementById('room-input').value.trim().toUpperCase();
+        if(!inputId) { mStatus.innerText = "Введите код комнаты!"; return; }
+        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Код должен быть из 5 латинских букв или цифр."; return; }
+
+        mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка комнаты...";
+        try {
+            const data = await fbRequest(`rooms/${inputId}`);
+            if(data) {
+                roomId = inputId; myRole = 2;
+                await fbRequest(`rooms/${roomId}/guestJoined`, "PUT", true);
                 startOnlineGame();
-            } catch(e) { 
-                mStatus.style.color = "#e74c3c"; 
-                mStatus.innerText = `Ошибка сети: ${e.message}. Проверьте Rules в Firebase!`; 
+            } else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
+        } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
+    }
+
+    function startOnlineGame() {
+        document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
+        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+        let cSz = '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
+        
+        pollInterval = setInterval(async () => {
+            let data = await fbRequest(`rooms/${roomId}`); if(!data) return;
+            p1 = data.p1; p2 = data.p2; cur = data.cur; mode = data.mode; over = data.over; statP1 = data.statP1; statP2 = data.statP2; hW = JSON.parse(data.hWData); vW = JSON.parse(data.vWData);
+            if (!data.guestJoined) { sTxt.innerText = "Ожидание подключения второго игрока..."; return; }
+            if (over) { clearInterval(pollInterval); showModalEnd(); return; }
+            sTxt.innerText = `${myRole===1?"Синий (Вы)":"Красный (Вы)"} | ${cur===myRole?"ВАШ ХОД!":(cur===1?"Ход Синего":"Ход Красного")}`;
+            wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; updateButtons(); draw();
+        }, 800);
+    }
+
+    function sync() { fbRequest(`rooms/${roomId}`, "PATCH", { p1, p2, cur, mode, over, statP1, statP2, hWData: JSON.stringify(hW), vWData: JSON.stringify(vW) }); }
+    window.toggleWallMode = function(m) { if (over || cur !== myRole) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
+    function updateButtons() { document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active')); if (mode === 'wall-h') document.getElementById('btn-wall-h').classList.add('active'); if (mode === 'wall-v') document.getElementById('btn-wall-v').classList.add('active'); }
+    function draw() {
+        bDiv.innerHTML = ''; let vm = (mode === 'move' && cur === myRole) ? getMoves() : []; let pSz = '32px';
+        for (let r = 0; r < S; r++) {
+            for (let c = 0; c < S; c++) {
+                let cl = document.createElement('div'); cl.className = 'cell'; if (r === 0) cl.classList.add('goal-blue'); if (r === S - 1) cl.classList.add('goal-red');
+                if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && myRole === 1) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
+                else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && myRole === 2) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
+                else if (vm.some(m => m.r === r && m.c === c)) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) over = true; else { cur = cur === 1 ? 2 : 1; mode = 'move'; } sync(); }; }
+                bDiv.appendChild(cl);
+                if (c < S - 1) {
+                    let v = document.createElement('div'); v.className = 'wall-space-v'; v.id = `v-${r}-${c}`; let wOwner = (r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c]); if (wOwner) { v.classList.add('wall-active'); v.classList.add(`wall-p${wOwner}`); }
+                    if (mode === 'wall-v' && cur === myRole) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => place(r,c,'v'); }
+                    bDiv.appendChild(v);
+                }
             }
-        }
-
-        window.joinExistingRoom = async function() {
-            let inputId = document.getElementById('room-input').value.trim().toUpperCase();
-            if(!inputId) { mStatus.innerText = "Введите код комнаты!"; return; }
-            if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Формат: 5 латинских букв или цифр."; return; }
-
-            mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка комнаты...";
-            try {
-                const snapshot = await get(ref(db, 'rooms/' + inputId));
-                if(snapshot.exists()) {
-                    roomId = inputId; myRole = 2;
-                    await update(ref(db, 'rooms/' + roomId), { guestJoined: true });
-                    startOnlineGame();
-                } else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
-            } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
-        }
-
-        function startOnlineGame() {
-            document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
-            document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-            let cSz = '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
-            
-            // Нативное прослушивание изменений (работает без таймеров и интервалов)
-            onValue(ref(db, 'rooms/' + roomId), (snapshot) => {
-                const data = snapshot.val(); if (!data) return;
-                p1 = data.p1; p2 = data.p2; cur = data.cur; mode = data.mode; over = data.over; statP1 = data.statP1; statP2 = data.statP2; hW = JSON.parse(data.hWData); vW = JSON.parse(data.vWData);
-                if (!data.guestJoined) { sTxt.innerText = "Ожидание подключения второго игрока..."; return; }
-                if (over) { showModalEnd(); return; }
-                sTxt.innerText = `${myRole===1?"Синий (Вы)":"Красный (Вы)"} | ${cur===myRole?"ВАШ ХОД!":(cur===1?"Ход Синего":"Ход Красного")}`;
-                wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; updateButtons(); draw();
-            });
-        }
-
-        function sync() { update(ref(db, 'rooms/' + roomId), { p1, p2, cur, mode, over, statP1, statP2, hWData: JSON.stringify(hW), vWData: JSON.stringify(vW) }); }
-        window.toggleWallMode = function(m) { if (over || cur !== myRole) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
-        function updateButtons() { document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active')); if (mode === 'wall-h') document.getElementById('btn-wall-h').classList.add('active'); if (mode === 'wall-v') document.getElementById('btn-wall-v').classList.add('active'); }
-        function draw() {
-            bDiv.innerHTML = ''; let vm = (mode === 'move' && cur === myRole) ? getMoves() : []; let pSz = '32px';
-            for (let r = 0; r < S; r++) {
+            if (r < S - 1) {
                 for (let c = 0; c < S; c++) {
-                    let cl = document.createElement('div'); cl.className = 'cell'; if (r === 0) cl.classList.add('goal-blue'); if (r === S - 1) cl.classList.add('goal-red');
-                    if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && myRole === 1) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
-                    else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && myRole === 2) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
-                    else if (vm.some(m => m.r === r && m.c === c)) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) over = true; else { cur = cur === 1 ? 2 : 1; mode = 'move'; } sync(); }; }
-                    bDiv.appendChild(cl);
-                    if (c < S - 1) {
-                        let v = document.createElement('div'); v.className = 'wall-space-v'; v.id = `v-${r}-${c}`; let wOwner = (r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c]); if (wOwner) { v.classList.add('wall-active'); v.classList.add(`wall-p${wOwner}`); }
-                        if (mode === 'wall-v' && cur === myRole) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => place(r,c,'v'); }
-                        bDiv.appendChild(v);
-                    }
-                }
-                if (r < S - 1) {
-                    for (let c = 0; c < S; c++) {
-                        let h = document.createElement('div'); h.className = 'wall-space-h'; h.id = `h-${r}-${c}`; let wOwner = (c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1]); if (wOwner) { h.classList.add('wall-active'); h.classList.add(`wall-p${wOwner}`); }
-                        if (mode === 'wall-h' && cur === myRole) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => place(r,c,'h'); }
-                        bDiv.appendChild(h);
-                        if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; i.id = `i-${r}-${c}`; let iOwner = hW[r][c] || vW[r][c]; if (iOwner) { i.classList.add('wall-active'); i.classList.add(`wall-p${iOwner}`); } bDiv.appendChild(i); }
-                    }
+                    let h = document.createElement('div'); h.className = 'wall-space-h'; h.id = `h-${r}-${c}`; let wOwner = (c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1]); if (wOwner) { h.classList.add('wall-active'); h.classList.add(`wall-p${wOwner}`); }
+                    if (mode === 'wall-h' && cur === myRole) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => place(r,c,'h'); }
+                    bDiv.appendChild(h);
+                    if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; i.id = `i-${r}-${c}`; let iOwner = hW[r][c] || vW[r][c]; if (iOwner) { i.classList.add('wall-active'); i.classList.add(`wall-p${iOwner}`); } bDiv.appendChild(i); }
                 }
             }
         }
+    }
 
-        function getBaseCoord(r, c, t) { if (t === 'h') { if (c === S - 1) c--; else if (c > 0 && hW[r][c-1]) c--; else if (c < S - 2 && !chkW(r, c, 'h') && chkW(r, c-1, 'h')) c--; } else { if (r === S - 1) r--; else if (r > 0 && vW[r-1][c]) r--; else if (r < S - 2 && !chkW(r, c, 'v') && chkW(r - 1, c, 'v')) r--; } return { r, c }; }
-        function hover(r, c, t, isIn) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; let act = isIn ? 'add' : 'remove'; document.getElementById(`${t}-${base.r}-${base.c}`)?.classList[act]('wall-hover'); document.getElementById(`${t}-${t=='h'?base.r:base.r+1}-${t=='h'?base.c+1:base.c}`)?.classList[act]('wall-hover'); document.getElementById(`i-${base.r}-${base.c}`)?.classList[act]('wall-hover'); }
-        function chkW(r, c, t) { if (r < 0 || c < 0 || r >= S - 1 || c >= S - 1 || (cur === 1 ? p1.w : p2.w) <= 0) return false; if (t === 'h') { if (hW[r][c] || (c < S - 2 && hW[r][c+1]) || (c > 0 && hW[r][c-1]) || vW[r][c]) return false; } else { if (vW[r][c] || (r < S - 2 && vW[r+1][c]) || (r > 0 && vW[r-1][c]) || hW[r][c]) return false; } return true; }
-        function place(r, c, t) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; if (t === 'h') hW[base.r][base.c] = cur; else vW[base.r][base.c] = cur; if (cur === 1) { p1.w--; statP1.w++; cur = 2; } else { p2.w--; statP2.w++; cur = 1; } mode = 'move'; sync(); }
-        function isW(r1, c1, r2, c2) { if (r1 === r2) { let m = Math.min(c1, c2); return (r1 < S - 1 && vW[r1][m]) || (r1 > 0 && vW[r1-1][m]); } else { let m = Math.min(r1, r2); return (c1 < S - 1 && hW[m][c1]) || (c1 > 0 && hW[m][c1-1]); } }
+    function getBaseCoord(r, c, t) { if (t === 'h') { if (c === S - 1) c--; else if (c > 0 && hW[r][c-1]) c--; else if (c < S - 2 && !chkW(r, c, 'h') && chkW(r, c-1, 'h')) c--; } else { if (r === S - 1) r--; else if (r > 0 && vW[r-1][c]) r--; else if (r < S - 2 && !chkW(r, c, 'v') && chkW(r - 1, c, 'v')) r--; } return { r, c }; }
+    function hover(r, c, t, isIn) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; let act = isIn ? 'add' : 'remove'; document.getElementById(`${t}-${base.r}-${base.c}`)?.classList[act]('wall-hover'); document.getElementById(`${t}-${t=='h'?base.r:base.r+1}-${t=='h'?base.c+1:base.c}`)?.classList[act]('wall-hover'); document.getElementById(`i-${base.r}-${base.c}`)?.classList[act]('wall-hover'); }
+    function chkW(r, c, t) { if (r < 0 || c < 0 || r >= S - 1 || c >= S - 1 || (cur === 1 ? p1.w : p2.w) <= 0) return false; if (t === 'h') { if (hW[r][c] || (c < S - 2 && hW[r][c+1]) || (c > 0 && hW[r][c-1]) || vW[r][c]) return false; } else { if (vW[r][c] || (r < S - 2 && vW[r+1][c]) || (r > 0 && vW[r-1][c]) || hW[r][c]) return false; } return true; }
+    function place(r, c, t) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; if (t === 'h') hW[base.r][base.c] = cur; else vW[base.r][base.c] = cur; if (cur === 1) { p1.w--; statP1.w++; cur = 2; } else { p2.w--; statP2.w++; cur = 1; } mode = 'move'; sync(); }
+    function isW(r1, c1, r2, c2) { if (r1 === r2) { let m = Math.min(c1, c2); return (r1 < S - 1 && vW[r1][m]) || (r1 > 0 && vW[r1-1][m]); } else { let m = Math.min(r1, r2); return (c1 < S - 1 && hW[m][c1]) || (c1 > 0 && hW[m][c1-1]); } }
 
-        function getMoves() {
-            let a = cur === 1 ? p1 : p2, o = cur === 1 ? p2 : p1, m = [], dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
-            dirs.forEach(d => {
-                let nr = a.r + d.dr, nc = a.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S) {
-                    if (isW(a.r, a.c, nr, nc)) return;
-                    if (nr === o.r && nc === o.c) {
-                        let jr = nr + d.dr, jc = nc + d.dc, block = (jr < 0 || jr >= S || jc < 0 || jc >= S) || isW(nr, nc, jr, jc); if (!block) m.push({ r: jr, c: jc });
-                        if (d.dr !== 0) { if (nc - 1 >= 0 && !isW(nr, nc, nr, nc - 1)) m.push({ r: nr, c: nc - 1 }); if (nc + 1 < S && !isW(nr, nc, nr, nc + 1)) m.push({ r: nr, c: nc + 1 }); }
-                        else { if (nr - 1 >= 0 && !isW(nr, nc, nr - 1, nc)) m.push({ r: nr - 1, c: nc }); if (nr + 1 < S && !isW(nr, nc, nr + 1, nc)) m.push({ r: nr + 1, c: nc }); }
-                    } else m.push({ r: nr, c: nc });
-                }
-            }); return m;
-        }
-
-        function hasPath(sR, sC, tR) {
-            let q = [{r: sR, c: sC}], v = Array(S).fill().map(() => Array(S).fill(false)); v[sR][sC] = true;
-            while(q.length > 0) {
-                let curr = q.shift(); if (curr.r === tR) return true; let dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
-                for(let d of dirs) { let nr = curr.r + d.dr, nc = curr.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S && !v[nr][nc]) { if (!isW(curr.r, curr.c, nr, nc)) { v[nr][nc] = true; q.push({r: nr, c: nc}); } } }
-            } return false;
-        }
-
-        function checkPathWithWall(r, c, t) { if (t === 'h') hW[r][c] = true; else vW[r][c] = true; let p1V = hasPath(p1.r, p1.c, 0), p2V = hasPath(p2.r, p2.c, S - 1); if (t === 'h') hW[r][c] = false; else vW[r][c] = false; return p1V && p2V; }
-        function showModalEnd() { let winColor = p1.r === 0 ? 'Синий 🎉' : 'Красный 🎉'; document.getElementById('md-winner').innerText = `Победил: ${winColor}`; document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; document.getElementById('result-modal').classList.add('active'); }
-    </script>
+    function getMoves() {
+        let a = cur === 1 ? p1 : p2, o = cur === 1 ? p2 : p1, m = [], dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+        dirs.forEach(d => {
+            let nr = a.r + d.dr, nc = a.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S) {
+                if (isW(a.r, a.c, nr, nc)) return;
+                if (nr === o.r && nc === o.c) {
+                    let jr = nr + d.dr, jc = nc + d.dc, block = (jr < 0 || jr >= S || jc < 0 || jc >= S) || isW(nr, nc, jr, jc); if (!block) m.push({ r: jr, c: jc });
+                    if (d.dr !== 0) { if (nc - 1 >= 0 && !isW(nr, nc, nr, nc - 1)) m.push({ r: nr, c: nc - 1 }); if (nc + 1 < S && !isW(nr, nc, nr, nc + 1)) m.push({ r: nr, c: nc + 1 }); }
+                    else { if (nr - 1 >= 0 && !isW(nr, nc, nr - 1, nc)) m.push({ r: nr - 1, c: nc }); if (nr + 1 < S && !isW(nr, nc, nr + 1, nc)) m.push({ r: nr + 1, c: nc }); }
+                } else m.push({ r: nr, c: nc });
+            }
+        }); return m;
+    }
+    function hasPath(sR, sC, tR) {
+        let q = [{r: sR, c: sC}], v = Array(S).fill().map(() => Array(S).fill(false)); v[sR][sC] = true;
+        while(q.length > 0) {
+            let curr = q.shift(); if (curr.r === tR) return true; let dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+            for(let d of dirs) { let nr = curr.r + d.dr, nc = curr.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S && !v[nr][nc]) { if (!isW(curr.r, curr.c, nr, nc)) { v[nr][nc] = true; q.push({r: nr, c: nc}); } } }
+        } return false;
+    }
+    function checkPathWithWall(r, c, t) { if (t === 'h') hW[r][c] = true; else vW[r][c] = true; let p1V = hasPath(p1.r, p1.c, 0), p2V = hasPath(p2.r, p2.c, S - 1); if (t === 'h') hW[r][c] = false; else vW[r][c] = false; return p1V && p2V; }
+    function showModalEnd() { let winColor = p1.r === 0 ? 'Синий 🎉' : 'Красный 🎉'; document.getElementById('md-winner').innerText = `Победил: ${winColor}`; document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; document.getElementById('result-modal').classList.add('active'); }
+</script>
 </body>
 </html>
