@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Коридор — Ultimate Edition</title>
+    <title>Коридор Онлайн</title>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
@@ -10,8 +10,7 @@
         .menu-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); text-align: center; max-width: 440px; width: 90%; }
         h1 { margin-top: 0; color: #2c3e50; font-size: 26px; margin-bottom: 20px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; font-size: 15px; font-weight: bold; color: #555; }
-        .setting-row select, .setting-row input { box-sizing: border-box; padding: 6px; width: 200px; height: 36px; border: 2px solid #bdc3c7; border-radius: 6px; font-size: 14px; font-weight: bold; text-align: center; text-align-last: center; }
-        #room-input { text-transform: uppercase; }
+        .setting-row select, .setting-row input { box-sizing: border-box; padding: 6px; width: 190px; height: 36px; border: 2px solid #bdc3c7; border-radius: 6px; font-size: 14px; font-weight: bold; text-align: center; text-align-last: center; }
         #game-info { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; font-weight: bold; }
         #status { font-size: 20px; margin-bottom: 4px; text-align: center; }
         #w-count { font-size: 15px; color: #555; margin: 2px 0; }
@@ -47,18 +46,15 @@
         <div class="menu-card">
             <h1>Коридор</h1>
             
-            <!-- Выбор режима игры -->
             <div class="setting-row"><span>Режим игры:</span>
                 <select id="cfg-mode" onchange="updateMenuSteps()">
                     <option value="none" selected disabled>— Выберите режим —</option>
                     <option value="pvp">На двоих (один экран)</option>
                     <option value="ai">Против компьютера</option>
-                    <option value="online_create">Онлайн: Создать комнату</option>
-                    <option value="online_join">Онлайн: Войти по коду</option>
+                    <option value="online">Онлайн игра</option>
                 </select>
             </div>
 
-            <!-- Динамический блок настроек (активируется при выборе режима) -->
             <div id="extended-settings" style="display: none;">
                 <div class="setting-row" id="ai-diff-row" style="display: none;"><span>Сложность ИИ:</span>
                     <select id="cfg-diff">
@@ -67,25 +63,29 @@
                         <option value="hard">Тяжёлый (Мастер)</option>
                     </select>
                 </div>
-                <div class="setting-row" id="online-input-row" style="display: none;"><span>Код комнаты:</span>
-                    <input type="text" id="room-input" placeholder="5 ЛАТИНСКИХ БУКВ">
-                </div>
-                <div class="setting-row" id="size-row"><span>Размер поля:</span>
+                <div class="setting-row"><span>Размер поля:</span>
                     <select id="cfg-size">
                         <option value="7">7 х 7 (Быстрая)</option>
                         <option value="9" selected>9 x 9 (Классика)</option>
                         <option value="11">11 х 11 (Большая)</option>
                     </select>
                 </div>
-                <div class="setting-row" id="walls-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
-                <button class="btn-main" id="btn-start" onclick="startSelectedGameMode()">⚔️ Начать матч</button>
+                <div class="setting-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
+                <button class="btn-main" onclick="initLocalGame()">⚔️ Начать матч</button>
             </div>
-            <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
+
+            <div id="online-settings" style="display: none;">
+                <button class="btn-main" onclick="createNewRoom()">🏠 Создать комнату</button>
+                <div style="margin: 10px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
+                <div class="setting-row"><input type="text" id="room-input" style="width:100%;" placeholder="Код комнаты"></div>
+                <button class="btn-main" style="background: #2ecc71;" onclick="joinExistingRoom()">⚔️ Подключиться</button>
+            </div>
+            <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px;"></div>
         </div>
     </div>
     <div id="game-screen" class="screen">
         <div id="game-info">
-            <div id="room-id-display" style="font-size: 14px; color: #7f8c8d; margin-bottom: 5px; display: none;"></div>
+            <div id="room-id-display" style="font-size: 14px; color: #7f8c8d; margin-bottom: 5px;"></div>
             <div id="status">Ход Синего</div>
             <div id="w-count">Стены Синего: 10 | Красного: 10</div>
         </div>
@@ -106,67 +106,66 @@
                 <tr><td>Сделано ходов</td><td id="st-m1">0</td><td id="st-m2">0</td></tr>
                 <tr><td>Построено стен</td><td id="st-w1">0</td><td id="st-w2">0</td></tr>
             </table>
-            <button class="btn-main" id="btn-rematch" style="background: #2ecc71;" onclick="rematchGame()">🔄 Реванш</button>
+            <button id="btn-rematch" class="btn-main" style="background: #2ecc71;" onclick="rematchGame()">🔄 Реванш</button>
             <button class="btn-main" style="background: #7f8c8d;" onclick="closeModal()">В главное меню</button>
         </div>
     </div>
 <script>
     const DB_URL = "https://firebasedatabase.app";
-    let S = 9, startWalls = 10, gameMode = "pvp", aiDiff = "normal", myRole = 0, roomId = "", pollInterval = null;
+    let S = 9, startWalls = 10, gameMode = "pvp", aiDiff = "normal";
     let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
-    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, scoreP1 = 0, scoreP2 = 0;
+    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null, scoreP1 = 0, scoreP2 = 0;
 
     async function fbRequest(path, method = "GET", data = null) {
-        let options = { method }; if (data) options.body = JSON.stringify(data);
-        let res = await fetch(`${DB_URL}${path}.json`, options); return res.json();
+        let opts = { method }; if (data) opts.body = JSON.stringify(data);
+        let res = await fetch(`${DB_URL}${path}.json`, opts); return res.json();
     }
+    function updateMenuSteps() {
+        let m = document.getElementById('cfg-mode').value; mStatus.innerText = "";
+        document.getElementById('extended-settings').style.display = (m === 'pvp' || m === 'ai') ? 'block' : 'none';
+        document.getElementById('ai-diff-row').style.display = (m === 'ai') ? 'flex' : 'none';
+        document.getElementById('online-settings').style.display = (m === 'online') ? 'block' : 'none';
+    }
+    function exitToMenu() { if(pollInterval) clearInterval(pollInterval); scoreP1=0; scoreP2=0; document.getElementById('cfg-mode').value="none"; updateMenuSteps(); document.getElementById('game-screen').classList.remove('active'); document.getElementById('menu-screen').classList.add('active'); }
+    function closeModal() { document.getElementById('result-modal').classList.remove('active'); exitToMenu(); }
+    function initLocalGame() { S = parseInt(document.getElementById('cfg-size').value); startWalls = parseInt(document.getElementById('cfg-walls').value)||0; gameMode = document.getElementById('cfg-mode').value; aiDiff = document.getElementById('cfg-diff').value; rematchGame(); }
+
     function generateLatinId() {
         const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let res = "";
         for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length)); return res;
     }
-
-    function updateMenuSteps() {
-        let m = document.getElementById('cfg-mode').value;
-        mStatus.innerText = "";
-        if (m === "none") { document.getElementById('extended-settings').style.display = 'none'; return; }
-        
-        document.getElementById('extended-settings').style.display = 'block';
-        document.getElementById('ai-diff-row').style.display = (m === 'ai') ? 'flex' : 'none';
-        document.getElementById('online-input-row').style.display = (m === 'online_join') ? 'flex' : 'none';
-        document.getElementById('size-row').style.display = (m === 'online_join') ? 'none' : 'flex';
-        document.getElementById('walls-row').style.display = (m === 'online_join') ? 'none' : 'flex';
+    window.createNewRoom = async function() {
+        roomId = generateLatinId(); myRole = 1; gameMode = "online"; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание комнаты...";
+        try {
+            const state = { p1: { r: 8, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(8).fill().map(() => Array(8).fill(false))), vWData: JSON.stringify(Array(8).fill().map(() => Array(8).fill(false))), guestJoined: false };
+            await fbRequest(`rooms/${roomId}`, "PUT", state); startOnlineGame();
+        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка сети!"; }
     }
-
-    async function startSelectedGameMode() {
-        gameMode = document.getElementById('cfg-mode').value;
-        S = parseInt(document.getElementById('cfg-size').value);
-        startWalls = parseInt(document.getElementById('cfg-walls').value) || 0;
-        aiDiff = document.getElementById('cfg-diff').value;
-
-        if (gameMode === 'online_create') {
-            roomId = generateLatinId(); myRole = 1; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание онлайн-комнаты...";
-            try {
-                const state = { S, startWalls, p1: { r: S - 1, c: Math.floor(S/2), w: startWalls }, p2: { r: 0, c: Math.floor(S/2), w: startWalls }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false };
-                await fbRequest(`rooms/${roomId}`, "PUT", state); startOnlinePolling();
-            } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка сети! Проверьте Firebase Rules."; }
-        } else if (gameMode === 'online_join') {
-            let inputId = document.getElementById('room-input').value.trim().toUpperCase();
-            if(!inputId || !(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Используйте код из 5 латинских букв или цифр."; return; }
-            mStatus.style.color = "#3498db"; mStatus.innerText = "Подключение к сессии...";
-            try {
-                const data = await fbRequest(`rooms/${inputId}`);
-                if(data) { roomId = inputId; myRole = 2; S = data.S; startWalls = data.startWalls; await fbRequest(`rooms/${roomId}/guestJoined`, "PUT", true); startOnlinePolling(); } 
-                else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
-            } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
-        } else {
-            myRole = 0; rematchGame();
-        }
+    window.joinExistingRoom = async function() {
+        let inputId = document.getElementById('room-input').value.trim().toUpperCase(); if(!inputId) return;
+        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Неверный формат! Нужны 5 латинских букв или цифр."; return; }
+        mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка...";
+        try {
+            const data = await fbRequest(`rooms/${inputId}`);
+            if(data) { roomId = inputId; myRole = 2; gameMode = "online"; await fbRequest(`rooms/${roomId}/guestJoined`, "PUT", true); startOnlineGame(); } 
+            else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
+        } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
     }
-    function startOnlinePolling() {
-        document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
-        document.getElementById('room-id-display').style.display = 'block'; document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-        document.getElementById('btn-rematch').style.display = 'none'; // Отключаем локальный реванш в онлайне
+    function rematchGame() {
+        document.getElementById('result-modal').classList.remove('active');
+        p1 = { r: S - 1, c: Math.floor(S/2), w: startWalls }; p2 = { r: 0, c: Math.floor(S/2), w: startWalls };
+        cur = 1; mode = 'move'; over = false; statP1 = { m: 0, w: 0 }; statP2 = { m: 0, w: 0 };
+        hW = Array(S-1).fill().map(() => Array(S-1).fill(false)); vW = Array(S-1).fill().map(() => Array(S-1).fill(false));
+        document.getElementById('room-id-display').innerText = "";
+        document.getElementById('btn-rematch').style.display = 'block';
         let cSz = S === 11 ? '36px' : S === 7 ? '55px' : '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
+        document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active'); nextTurnLogic();
+    }
+
+    function startOnlineGame() {
+        S = 9; document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
+        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`; document.getElementById('btn-rematch').style.display = 'none';
+        let cSz = '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
         pollInterval = setInterval(async () => {
             let data = await fbRequest(`rooms/${roomId}`); if(!data) return;
             p1 = data.p1; p2 = data.p2; cur = data.cur; mode = data.mode; over = data.over; statP1 = data.statP1; statP2 = data.statP2; hW = JSON.parse(data.hWData); vW = JSON.parse(data.vWData);
@@ -178,66 +177,57 @@
     }
 
     function sync() { fbRequest(`rooms/${roomId}`, "PATCH", { p1, p2, cur, mode, over, statP1, statP2, hWData: JSON.stringify(hW), vWData: JSON.stringify(vW) }); }
-    function exitToMenu() { clearInterval(pollInterval); scoreP1 = 0; scoreP2 = 0; document.getElementById('cfg-mode').value = "none"; document.getElementById('extended-settings').style.display = 'none'; document.getElementById('room-id-display').style.display = 'none'; document.getElementById('game-screen').classList.remove('active'); document.getElementById('menu-screen').classList.add('active'); }
-    function closeModal() { document.getElementById('result-modal').classList.remove('active'); exitToMenu(); }
-
-    function rematchGame() {
-        document.getElementById('result-modal').classList.remove('active'); document.getElementById('btn-rematch').style.display = 'block';
-        p1 = { r: S - 1, c: Math.floor(S/2), w: startWalls }; p2 = { r: 0, c: Math.floor(S/2), w: startWalls };
-        cur = 1; mode = 'move'; over = false; statP1 = { m: 0, w: 0 }; statP2 = { m: 0, w: 0 };
-        hW = Array(S-1).fill().map(() => Array(S-1).fill(false)); vW = Array(S-1).fill().map(() => Array(S-1).fill(false));
-        let cSz = S === 11 ? '36px' : S === 7 ? '55px' : '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
-        document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
-        nextTurnLogic();
-    }
-
-    function toggleWallMode(m) { if (over || (gameMode === 'ai' && cur === 2) || (myRole > 0 && cur !== myRole)) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
+    function toggleWallMode(m) { if (over || (gameMode === 'ai' && cur === 2) || (gameMode === 'online' && cur !== myRole)) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
     function updateButtons() { document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active')); if (mode === 'wall-h') document.getElementById('btn-wall-h').classList.add('active'); if (mode === 'wall-v') document.getElementById('btn-wall-v').classList.add('active'); }
     function draw() {
-        bDiv.innerHTML = ''; let vm = (mode === 'move' && (myRole === 0 || cur === myRole)) ? getMoves(cur) : []; let pSz = S === 11 ? '24px' : S === 7 ? '40px' : '32px';
+        bDiv.innerHTML = ''; let vm = (mode === 'move' && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) ? getMoves(cur) : []; let pSz = S === 11 ? '24px' : S === 7 ? '40px' : '32px';
         for (let r = 0; r < S; r++) {
             for (let c = 0; c < S; c++) {
                 let cl = document.createElement('div'); cl.className = 'cell'; if (r === 0) cl.classList.add('goal-blue'); if (r === S - 1) cl.classList.add('goal-red');
-                if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && (myRole === 0 || myRole === 1)) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
-                else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && myRole === 0) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
-                else if (vm.some(m => m.r === r && m.c === c) && !over) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) over = true; else { cur = cur === 1 ? 2 : 1; mode = 'move'; } if (myRole > 0) sync(); else if (over) showEnd(cur==1?2:1); else switchTurn(); }; }
+                if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && (!over && (gameMode !== 'online' || myRole === 1))) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
+                else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && (!over && gameMode === 'pvp')) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; if (cur === 2 && (!over && gameMode === 'online' && myRole === 2)) cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; }
+                else if (vm.some(m => m.r === r && m.c === c) && !over) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) { over = true; if(gameMode === 'online') sync(); else showEnd(cur==1?1:2); } else switchTurn(); }; }
                 bDiv.appendChild(cl);
                 if (c < S - 1) {
-                    let v = document.createElement('div'); v.className = 'wall-space-v'; v.id = `v-${r}-${c}`; if ((r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c])) { v.classList.add('wall-active'); v.classList.add((r < S - 1 && vW[r][c]) ? `wall-p${vW[r][c]}` : `wall-p${vW[r-1][c]}`); }
-                    if (mode === 'wall-v' && !over && (myRole === 0 || cur === myRole)) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => placeWall(r,c,'v'); }
+                    let v = document.createElement('div'); v.className = 'wall-space-v'; v.id = `v-${r}-${c}`;
+                    if ((r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c])) { v.classList.add('wall-active'); v.classList.add((r < S - 1 && vW[r][c]) ? `wall-p${vW[r][c]}` : `wall-p${vW[r-1][c]}`); }
+                    if (mode === 'wall-v' && !over && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => placeWall(r,c,'v'); }
                     bDiv.appendChild(v);
                 }
             }
             if (r < S - 1) {
                 for (let c = 0; c < S; c++) {
-                    let h = document.createElement('div'); h.className = 'wall-space-h'; h.id = `h-${r}-${c}`; if ((c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1])) { h.classList.add('wall-active'); h.classList.add((c < S - 1 && hW[r][c]) ? `wall-p${hW[r][c]}` : `wall-p${hW[r][c-1]}`); }
-                    if (mode === 'wall-h' && !over && (myRole === 0 || cur === myRole)) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => placeWall(r,c,'h'); }
+                    let h = document.createElement('div'); h.className = 'wall-space-h'; h.id = `h-${r}-${c}`;
+                    if ((c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1])) { h.classList.add('wall-active'); h.classList.add((c < S - 1 && hW[r][c]) ? `wall-p${hW[r][c]}` : `wall-p${hW[r][c-1]}`); }
+                    if (mode === 'wall-h' && !over && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => placeWall(r,c,'h'); }
                     bDiv.appendChild(h);
-                    if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; let o = hW[r][c] || vW[r][c]; if (o) { i.classList.add('wall-active'); i.classList.add(`wall-p${o}`); } bDiv.appendChild(i); }
+                    if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; let owner = hW[r][c] || vW[r][c]; if (owner) { i.classList.add('wall-active'); i.classList.add(`wall-p${owner}`); } bDiv.appendChild(i); }
                 }
             }
         }
     }
-    function placeWall(r, c, t) { let b = getBaseCoord(r, c, t); if (!chkW(b.r, b.c, t) || !checkPathWithWall(b.r, b.c, t)) return; if (t === 'h') hW[b.r][b.c] = cur; else vW[b.r][b.c] = cur; if (cur === 1) { p1.w--; statP1.w++; } else { p2.w--; statP2.w++; } if (myRole > 0) { cur = cur === 1 ? 2 : 1; mode = 'move'; sync(); } else switchTurn(); }
+    function getBaseCoord(r, c, t) { if (t === 'h') { if (c === S - 1) c--; else if (c > 0 && hW[r][c-1]) c--; else if (c < S - 2 && !chkW(r, c, 'h') && chkW(r, c-1, 'h')) c--; } else { if (r === S - 1) r--; else if (r > 0 && vW[r-1][c]) r--; else if (r < S - 2 && !chkW(r, c, 'v') && chkW(r - 1, c, 'v')) r--; } return { r, c }; }
+    function hover(r, c, t, isIn) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; let act = isIn ? 'add' : 'remove'; document.getElementById(`${t}-${base.r}-${base.c}`)?.classList[act]('wall-hover'); document.getElementById(`${t}-${t=='h'?base.r:base.r+1}-${t=='h'?base.c+1:base.c}`)?.classList[act]('wall-hover'); }
+    function chkW(r, c, t) { if (r < 0 || c < 0 || r >= S - 1 || c >= S - 1 || (cur === 1 ? p1.w : p2.w) <= 0) return false; if (t === 'h') { if (hW[r][c] || (c < S - 2 && hW[r][c+1]) || (c > 0 && hW[r][c-1]) || vW[r][c]) return false; } else { if (vW[r][c] || (r < S - 2 && vW[r+1][c]) || (r > 0 && vW[r-1][c]) || hW[r][c]) return false; } return true; }
+    function placeWall(r, c, t) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; if (t === 'h') hW[base.r][base.c] = cur; else vW[base.r][base.c] = cur; if (cur === 1) { p1.w--; statP1.w++; } else { p2.w--; statP2.w++; } switchTurn(); }
     function isW(r1, c1, r2, c2) { if (r1 === r2) { let m = Math.min(c1, c2); return (r1 < S - 1 && vW[r1][m]) || (r1 > 0 && vW[r1-1][m]); } else { let m = Math.min(r1, r2); return (c1 < S - 1 && hW[m][c1]) || (c1 > 0 && hW[m][c1-1]); } }
-    function switchTurn() { cur = cur === 1 ? 2 : 1; mode = 'move'; updateButtons(); nextTurnLogic(); }
+    function switchTurn() { if(gameMode === 'online') { cur = cur === 1 ? 2 : 1; mode = 'move'; sync(); } else { cur = cur === 1 ? 2 : 1; mode = 'move'; updateButtons(); nextTurnLogic(); } }
     function nextTurnLogic() { sTxt.innerText = `Ход ${cur === 1 ? 'Синего' : 'Красного'}`; wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; draw(); if (gameMode === 'ai' && cur === 2 && !over) setTimeout(makeAiMove, 600); }
-    
+
     function makeAiMove() {
-        let moves = getMoves(2);
+        let moves = getMoves(2); if (moves.length === 0) { switchTurn(); return; }
         if (aiDiff === 'easy' || p2.w === 0) { let m = moves[Math.floor(Math.random() * moves.length)]; p2.r = m.r; p2.c = m.c; statP2.m++; } 
         else {
             let bestMove = null; let minPath = 999; moves.forEach(m => { let dist = getShortestPathLen(m.r, m.c, S - 1); if (dist < minPath) { minPath = dist; bestMove = m; } });
-            let playerDist = getShortestPathLen(p1.r, p1.c, 0); if (aiDiff === 'hard' && playerDist < minPath && Math.random() > 0.4) { let wallPlaced = tryPlaceStrategicWall(); if (wallPlaced) return; }
+            if (!bestMove) bestMove = moves[0]; let playerDist = getShortestPathLen(p1.r, p1.c, 0);
+            if (aiDiff === 'hard' && playerDist < minPath && Math.random() > 0.4) { let wallPlaced = tryPlaceStrategicWall(); if (wallPlaced) return; }
             p2.r = bestMove.r; p2.c = bestMove.c; statP2.m++;
         }
         if (p2.r === S - 1) showEnd(2); else switchTurn();
     }
-    function tryPlaceStrategicWall() {
-        for (let attempt = 0; attempt < 30; attempt++) { let r = p1.r - (Math.random() > 0.5 ? 0 : 1); let c = p1.c + Math.floor(Math.random() * 3) - 1; let type = Math.random() > 0.5 ? 'h' : 'v'; if (chkW(r, c, type) && checkPathWithWall(r, c, type)) { if (type === 'h') hW[r][c] = 2; else vW[r][c] = 2; p2.w--; statP2.w++; switchTurn(); return true; } } return false;
-    }
-    function getMoves(pN) {
-        let a = pN === 1 ? p1 : p2, o = pN === 1 ? p2 : p1, m = [], dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+    function tryPlaceStrategicWall() { for (let attempt = 0; attempt < 30; attempt++) { let r = p1.r - (Math.random() > 0.5 ? 0 : 1); let c = p1.c + Math.floor(Math.random() * 3) - 1; let type = Math.random() > 0.5 ? 'h' : 'v'; if (chkW(r, c, type) && checkPathWithWall(r, c, type)) { if (type === 'h') hW[r][c] = 2; else vW[r][c] = 2; p2.w--; statP2.w++; switchTurn(); return true; } } return false; }
+    function getMoves(playerNum) {
+        let a = playerNum === 1 ? p1 : p2, o = playerNum === 1 ? p2 : p1, m = [], dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
         dirs.forEach(d => {
             let nr = a.r + d.dr, nc = a.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S) {
                 if (isW(a.r, a.c, nr, nc)) return;
@@ -249,6 +239,32 @@
             }
         }); return m;
     }
+
     function getShortestPathLen(sR, sC, tR) {
         let q = [{r: sR, c: sC, d: 0}], v = Array(S).fill().map(() => Array(S).fill(false)); v[sR][sC] = true;
-        while(q.length > 0) { let curr = q.shift(); if (curr.r === tR) return curr.d; let dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}]; for(let d of dirs) { let nr = curr.r + d.dr, nc = curr.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S && !v[nr][nc] && !isW(curr.r, curr.c, nr, nc)) { v[nr][nc] = true; q.push({r: nr, c: nc, d: curr.d + 1}); } } } return 99;
+        while(q.length > 0) {
+            let curr = q.shift(); if (curr.r === tR) return curr.d;
+            let dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+            for(let d of dirs) {
+                let nr = curr.r + d.dr, nc = curr.c + d.dc;
+                if (nr >= 0 && nr < S && nc >= 0 && nc < S && !v[nr][nc] && !isW(curr.r, curr.c, nr, nc)) { v[nr][nc] = true; q.push({r: nr, c: nc, d: curr.d + 1}); }
+            }
+        } return 99;
+    }
+
+    function checkPathWithWall(r, c, t) { if (t === 'h') hW[r][c] = true; else vW[r][c] = true; let p1V = getShortestPathLen(p1.r, p1.c, 0) < 99, p2V = getShortestPathLen(p2.r, p2.c, S - 1) < 99; if (t === 'h') hW[r][c] = false; else vW[r][c] = false; return p1V && p2V; }
+    
+    function showEnd(winnerNum) { 
+        over = true; mode = 'none'; updateButtons(); draw(); if (pollInterval) clearInterval(pollInterval);
+        if(winnerNum === 1) scoreP1++; else scoreP2++;
+        let label = (winnerNum === 1) ? 'Синий (Вы) 🎉' : (gameMode === 'ai' ? 'Компьютер 🤖' : 'Красный 🎉');
+        document.getElementById('md-winner').innerText = `Победил: ${label}`; 
+        document.getElementById('md-score').innerText = `Общий счёт сессии: ${scoreP1} : ${scoreP2}`;
+        document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; 
+        document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; 
+        document.getElementById('result-modal').classList.add('active'); 
+        if (gameMode === "online") { fbRequest(`rooms/${roomId}/over`, "PUT", true); }
+    }
+</script>
+</body>
+</html>
