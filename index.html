@@ -111,14 +111,20 @@
         </div>
     </div>
 <script>
+       const S = 9;
     const DB_URL = "https://firebasedatabase.app";
-    let S = 9, startWalls = 10, gameMode = "pvp", aiDiff = "normal";
     let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
-    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null, scoreP1 = 0, scoreP2 = 0;
+    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null;
+    let scoreP1 = 0, scoreP2 = 0;
 
+    // ИСПРАВЛЕННАЯ СЕТЕВАЯ ФУНКЦИЯ ДЛЯ GITHUB PAGES:
     async function fbRequest(path, method = "GET", data = null) {
-        let opts = { method }; if (data) opts.body = JSON.stringify(data);
-        let res = await fetch(`${DB_URL}${path}.json`, opts); return res.json();
+        let options = { method, headers: { "Content-Type": "application/json" } };
+        if (data) options.body = JSON.stringify(data);
+        let res = await fetch(`${DB_URL}${path}.json`, options);
+        return res.json();
+    }
+
     }
     function updateMenuSteps() {
         let m = document.getElementById('cfg-mode').value; mStatus.innerText = "";
