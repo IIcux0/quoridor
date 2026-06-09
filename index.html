@@ -123,92 +123,49 @@
     </div>
 <script>
     let S = 9, startWalls = 10, gameMode = "pvp", aiDiff = "normal";
-    const DB_URL = "https://firebasedatabase.app";
-    let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count'), mStatus = document.getElementById('menu-status');
-    let p1, p2, cur, mode, over, hW, vW, statP1, statP2, myRole = 0, roomId = "", pollInterval = null;
+    let bDiv = document.getElementById('board'), sTxt = document.getElementById('status'), wTxt = document.getElementById('w-count');
+    let p1, p2, cur, mode, over, hW, vW, statP1, statP2;
     let scoreP1 = 0, scoreP2 = 0;
 
-    async function fbRequest(path, method = "GET", data = null) {
-        let options = { method, mode: "cors", headers: { "Content-Type": "application/json", "Accept": "application/json" } };
-        if (data) options.body = JSON.stringify(data);
-        let res = await fetch(`${DB_URL}/${path}.json`, options);
-        return res.json();
-    }
+    const extendedSettings = document.getElementById('extended-settings');
+    const onlinePanel = document.getElementById('online-panel');
+    const aiDiffRow = document.getElementById('ai-diff-row');
+    const roomIdDisplay = document.getElementById('room-id-display');
+    const mStatus = document.getElementById('menu-status');
 
-    function generateLatinId() {
-        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let res = "";
-        for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
-        return res;
-    }
-
-    function updateMenuSteps() {
+    window.updateMenuSteps = function() {
         let m = document.getElementById('cfg-mode').value;
         mStatus.innerText = "";
-        if (m === "none") {
-            document.getElementById('online-panel').style.display = 'none';
-            document.getElementById('extended-settings').style.display = 'none';
-            return;
-        }
+        if (m === "none") { extendedSettings.style.display = 'none'; onlinePanel.style.display = 'none'; return; }
         if (m === "online") {
-            document.getElementById('online-panel').style.display = 'block';
-            document.getElementById('extended-settings').style.display = 'none';
+            onlinePanel.style.display = 'block'; extendedSettings.style.display = 'none';
         } else {
-            document.getElementById('online-panel').style.display = 'none';
-            document.getElementById('extended-settings').style.display = 'block';
-            document.getElementById('ai-diff-row').style.display = (m === 'ai') ? 'flex' : 'none';
+            extendedSettings.style.display = 'block'; onlinePanel.style.display = 'none';
+            aiDiffRow.style.display = (m === 'ai') ? 'flex' : 'none';
         }
     }
 
-    window.createNewRoom = async function() {
-        roomId = generateLatinId(); myRole = 1; gameMode = "online"; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание комнаты...";
-        try {
-            const state = { p1: { r: S - 1, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false, size: 9, startWalls: 10 };
-            await fbRequest(`rooms/${roomId}`, "PUT", state);
-            startOnlineGame();
-        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка сети! Проверьте Firebase Rules."; }
+    window.exitToMenu = function() { 
+        scoreP1 = 0; scoreP2 = 0;
+        document.getElementById('cfg-mode').value = "none";
+        extendedSettings.style.display = 'none'; onlinePanel.style.display = 'none';
+        roomIdDisplay.style.display = 'none';
+        document.getElementById('game-screen').classList.remove('active'); 
+        document.getElementById('menu-screen').classList.add('active'); 
     }
+    
+    window.closeModal = function() { document.getElementById('result-modal').classList.remove('active'); exitToMenu(); }
 
-    window.joinExistingRoom = async function() {
-        let inputId = document.getElementById('room-input').value.trim().toUpperCase();
-        if(!inputId) { mStatus.innerText = "Введите код комнаты!"; return; }
-        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Формат: 5 латинских букв или цифр."; return; }
-        mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка комнаты...";
-        try {
-            const data = await fbRequest(`rooms/${inputId}`);
-            if(data) {
-                roomId = inputId; myRole = 2; gameMode = "online";
-                await fbRequest(`rooms/${roomId}/guestJoined`, "PUT", true);
-                startOnlineGame();
-            } else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
-        } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
-    }
-    function startOnlineGame() {
-        document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
-        let rDisplay = document.getElementById('room-id-display'); rDisplay.style.display = 'block'; rDisplay.innerText = `ID КОМНАТЫ: ${roomId}`;
-        document.getElementById('btn-rematch').style.display = 'none'; // В онлайне реванш через создание новой комнаты
-        S = 9; startWalls = 10;
-        let cSz = '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
-        
-        pollInterval = setInterval(async () => {
-            try {
-                let data = await fbRequest(`rooms/${roomId}`); if(!data) return;
-                p1 = data.p1; p2 = data.p2; cur = data.cur; mode = data.mode; over = data.over; statP1 = data.statP1; statP2 = data.statP2; hW = JSON.parse(data.hWData); vW = JSON.parse(data.vWData);
-                if (!data.guestJoined) { sTxt.innerText = "Ожидание подключения второго игрока..."; return; }
-                if (over) { clearInterval(pollInterval); showEnd(p1.r === 0 ? 1 : 2); return; }
-                sTxt.innerText = `${myRole===1?"Синий (Вы)":"Красный (Вы)"} | ${cur===myRole?"ВАШ ХОД!":(cur===1?"Ход Синего":"Ход Красного")}`;
-                wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; updateButtons(); draw();
-            } catch(e) { console.error("Ошибка синхронизации"); }
-        }, 800);
-    }
-
-    function initLocalGame() {
-        S = parseInt(document.getElementById('cfg-size').value); startWalls = parseInt(document.getElementById('cfg-walls').value) || 0;
-        gameMode = document.getElementById('cfg-mode').value; aiDiff = document.getElementById('cfg-diff').value;
-        document.getElementById('room-id-display').style.display = 'none'; document.getElementById('btn-rematch').style.display = 'block';
+    window.initLocalGame = function() {
+        S = parseInt(document.getElementById('cfg-size').value);
+        startWalls = parseInt(document.getElementById('cfg-walls').value) || 0;
+        gameMode = document.getElementById('cfg-mode').value;
+        aiDiff = document.getElementById('cfg-diff').value;
+        document.getElementById('btn-rematch').style.display = 'block';
         rematchGame();
     }
 
-    function rematchGame() {
+    window.rematchGame = function() {
         document.getElementById('result-modal').classList.remove('active');
         p1 = { r: S - 1, c: Math.floor(S/2), w: startWalls }; p2 = { r: 0, c: Math.floor(S/2), w: startWalls };
         cur = 1; mode = 'move'; over = false; statP1 = { m: 0, w: 0 }; statP2 = { m: 0, w: 0 };
@@ -218,85 +175,152 @@
         document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
         nextTurnLogic();
     }
+</script>
 
-    function sync() { fbRequest(`rooms/${roomId}`, "PATCH", { p1, p2, cur, mode, over, statP1, statP2, hWData: JSON.stringify(hW), vWData: JSON.stringify(vW) }); }
-    function exitToMenu() { if(pollInterval) clearInterval(pollInterval); scoreP1 = 0; scoreP2 = 0; document.getElementById('cfg-mode').value = "none"; updateMenuSteps(); document.getElementById('game-screen').classList.remove('active'); document.getElementById('menu-screen').classList.add('active'); }
-    function closeModal() { document.getElementById('result-modal').classList.remove('active'); exitToMenu(); }
-    function toggleWallMode(m) { if (over || (gameMode === 'ai' && cur === 2) || (gameMode === 'online' && cur !== myRole)) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
-    function updateButtons() { document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active')); if (mode === 'wall-h') document.getElementById('btn-wall-h').classList.add('active'); if (mode === 'wall-v') document.getElementById('btn-wall-v').classList.add('active'); }
-    function draw() {
-        bDiv.innerHTML = ''; 
-        let isMyTurn = (gameMode === 'online') ? (cur === myRole) : !(gameMode === 'ai' && cur === 2);
-        let vm = (mode === 'move' && isMyTurn) ? getMoves(cur) : []; 
-        let pSz = S === 11 ? '24px' : S === 7 ? '40px' : '32px';
+<!-- Загружаем официальный сетевой клиент Firebase напрямую из облака Google -->
+<script type="module">
+    import { initializeApp } from "https://gstatic.com";
+    import { getDatabase, ref, set, onValue, update, get } from "https://gstatic.com";
+
+    // Инициализируем соединение с вашей европейской базой quoridor-online-859f5
+    const firebaseConfig = {
+        projectId: "quoridor-online-859f5",
+        databaseURL: "https://firebasedatabase.app"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Привязываем сетевые функции к кнопкам вашего интерфейса
+    window.createNewRoom = async function() {
+        roomId = generateLatinId(); myRole = 1; mStatus.style.color = "#3498db"; mStatus.innerText = "Создание комнаты...";
+        try {
+            const state = { p1: { r: S - 1, c: 4, w: 10 }, p2: { r: 0, c: 4, w: 10 }, cur: 1, mode: 'move', over: false, statP1: { m: 0, w: 0 }, statP2: { m: 0, w: 0 }, hWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), vWData: JSON.stringify(Array(S-1).fill().map(() => Array(S-1).fill(false))), guestJoined: false };
+            await set(ref(db, 'rooms/' + roomId), state);
+            startOnlineGame();
+        } catch(e) { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Ошибка соединения! Проверьте Firebase Rules."; }
+    }
+
+    window.joinExistingRoom = async function() {
+        let inputId = document.getElementById('room-input').value.trim().toUpperCase();
+        if(!inputId) { mStatus.innerText = "Введите код комнаты!"; return; }
+        if(!(/^[A-Z0-9]{5}$/).test(inputId)) { mStatus.innerText = "Формат: 5 латинских букв или цифр."; return; }
+        mStatus.style.color = "#3498db"; mStatus.innerText = "Проверка комнаты...";
+        try {
+            const snapshot = await get(ref(db, 'rooms/' + inputId));
+            if(snapshot.exists()) {
+                roomId = inputId; myRole = 2;
+                await update(ref(db, 'rooms/' + roomId), { guestJoined: true });
+                startOnlineGame();
+            } else { mStatus.style.color = "#e74c3c"; mStatus.innerText = "Комната не найдена!"; }
+        } catch(e) { mStatus.innerText = "Ошибка подключения!"; }
+    }
+
+    window.startOnlineGame = function() {
+        gameMode = "online"; document.getElementById('menu-screen').classList.remove('active'); document.getElementById('game-screen').classList.add('active');
+        roomIdDisplay.style.display = 'block'; roomIdDisplay.innerText = `ID КОМНАТЫ: ${roomId}`; document.getElementById('btn-rematch').style.display = 'none';
+        let cSz = '45px'; bDiv.style.gridTemplateColumns = `${cSz} repeat(${S-1}, 8px ${cSz})`; bDiv.style.gridTemplateRows = `${cSz} repeat(${S-1}, 8px ${cSz})`;
         
+        onValue(ref(db, 'rooms/' + roomId), (snapshot) => {
+            const data = snapshot.val(); if (!data) return;
+            p1 = data.p1; p2 = data.p2; cur = data.cur; mode = data.mode; over = data.over; statP1 = data.statP1; statP2 = data.statP2; hW = JSON.parse(data.hWData); vW = JSON.parse(data.vWData);
+            if (!data.guestJoined) { sTxt.innerText = "Ожидание подключения второго игрока..."; return; }
+            if (over) { showModalEndOnline(); return; }
+            sTxt.innerText = `${myRole===1?"Синий (Вы)":"Красный (Вы)"} | ${cur===myRole?"ВАШ ХОД!":(cur===1?"Ход Синего":"Ход Красного")}`;
+            wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; updateButtons(); draw();
+        });
+    }
+
+    window.syncOnline = function() { update(ref(db, 'rooms/' + roomId), { p1, p2, cur, mode, over, statP1, statP2, hWData: JSON.stringify(hW), vWData: JSON.stringify(vW) }); }
+    function showModalEndOnline() { over = true; mode = 'none'; updateButtons(); draw(); let winColor = p1.r === 0 ? 'Синий 🎉' : 'Красный 🎉'; document.getElementById('md-winner').innerText = `Победил: ${winColor}`; document.getElementById('md-score').innerText = "Матч окончен"; document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; document.getElementById('result-modal').classList.add('active'); }
+    window.toggleWallMode = function(m) { if (over || (gameMode === 'ai' && cur === 2) || (gameMode === 'online' && cur !== myRole)) return; mode = (mode === m) ? 'move' : m; updateButtons(); draw(); }
+    window.updateButtons = function() { document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active')); if (mode === 'wall-h') document.getElementById('btn-wall-h').classList.add('active'); if (mode === 'wall-v') document.getElementById('btn-wall-v').classList.add('active'); }
+
+    window.draw = function() {
+        bDiv.innerHTML = ''; let vm = (mode === 'move' && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) ? getMoves(cur) : [];
+        let pSz = S === 11 ? '24px' : S === 7 ? '40px' : '32px';
         for (let r = 0; r < S; r++) {
             for (let c = 0; c < S; c++) {
-                let cl = document.createElement('div'); cl.className = 'cell'; 
+                let cl = document.createElement('div'); cl.className = 'cell';
                 if (r === 0) cl.classList.add('goal-blue'); if (r === S - 1) cl.classList.add('goal-red');
                 
-                if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && gameMode !== 'online') { mode = 'move'; updateButtons(); draw(); }; }
-                else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && gameMode === 'pvp') { mode = 'move'; updateButtons(); draw(); }; }
-                else if (vm.some(m => m.r === r && m.c === c) && !over) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) { over = true; if(gameMode==="online") sync(); showEnd(cur); } else switchTurn(); }; }
+                if (r === p1.r && c === p1.c) { cl.innerHTML = `<div class="player p1" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 1 && !over && gameMode !== 'online') { cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; } }
+                else if (r === p2.r && c === p2.c) { cl.innerHTML = `<div class="player p2" style="width:${pSz}; height:${pSz};"></div>`; if (cur === 2 && gameMode === 'pvp' && !over) { cl.onclick = () => { mode = 'move'; updateButtons(); draw(); }; } }
+                else if (vm.some(m => m.r === r && m.c === c) && !over) { cl.classList.add('valid-move'); cl.onclick = () => { if(cur===1) statP1.m++; else statP2.m++; let a = cur==1?p1:p2; a.r=r; a.c=c; if((cur==1 && r===0)||(cur==2 && r===S-1)) showEnd(cur==1?1:2); else switchTurn(); }; }
                 bDiv.appendChild(cl);
                 
                 if (c < S - 1) {
                     let v = document.createElement('div'); v.className = 'wall-space-v'; v.id = `v-${r}-${c}`;
-                    let wOwner = (r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c]); if (wOwner) { v.classList.add('wall-active'); v.classList.add(`wall-p${wOwner}`); }
-                    if (mode === 'wall-v' && !over && isMyTurn) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => placeWall(r,c,'v'); }
+                    if ((r < S - 1 && vW[r][c]) || (r > 0 && vW[r-1][c])) { let wOwner = (r < S - 1 && vW[r][c]) ? vW[r][c] : vW[r-1][c]; v.classList.add('wall-active'); v.classList.add(`wall-p${wOwner}`); }
+                    if (mode === 'wall-v' && !over && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) { v.onmouseenter = () => hover(r,c,'v',1); v.onmouseleave = () => hover(r,c,'v',0); v.onclick = () => placeWall(r,c,'v'); }
                     bDiv.appendChild(v);
                 }
             }
             if (r < S - 1) {
                 for (let c = 0; c < S; c++) {
                     let h = document.createElement('div'); h.className = 'wall-space-h'; h.id = `h-${r}-${c}`;
-                    let wOwner = (c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1]); if (wOwner) { h.classList.add('wall-active'); h.classList.add(`wall-p${wOwner}`); }
-                    if (mode === 'wall-h' && !over && isMyTurn) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => placeWall(r,c,'h'); }
+                    if ((c < S - 1 && hW[r][c]) || (c > 0 && hW[r][c-1])) { let wOwner = (c < S - 1 && hW[r][c]) ? hW[r][c] : hW[r][c-1]; h.classList.add('wall-active'); h.classList.add(`wall-p${wOwner}`); }
+                    if (mode === 'wall-h' && !over && !(gameMode === 'ai' && cur === 2) && !(gameMode === 'online' && cur !== myRole)) { h.onmouseenter = () => hover(r,c,'h',1); h.onmouseleave = () => hover(r,c,'h',0); h.onclick = () => placeWall(r,c,'h'); }
                     bDiv.appendChild(h);
-                    if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; i.id = `i-${r}-${c}`; let iOwner = hW[r][c] || vW[r][c]; if (iOwner) { i.classList.add('wall-active'); i.classList.add(`wall-p${iOwner}`); } bDiv.appendChild(i); }
+                    if (c < S - 1) { let i = document.createElement('div'); i.className = 'wall-space-intersection'; let owner = hW[r][c] || vW[r][c]; if (owner) { i.classList.add('wall-active'); i.classList.add(`wall-p${owner}`); } bDiv.appendChild(i); }
                 }
             }
         }
     }
 
-    function getBaseCoord(r, c, t) { if (t === 'h') { if (c === S - 1) c--; else if (c > 0 && hW[r][c-1]) c--; else if (c < S - 2 && !chkW(r, c, 'h') && chkW(r, c-1, 'h')) c--; } else { if (r === S - 1) r--; else if (r > 0 && vW[r-1][c]) r--; else if (r < S - 2 && !chkW(r, c, 'v') && chkW(r - 1, c, 'v')) r--; } return { r, c }; }
-    function hover(r, c, t, isIn) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; let act = isIn ? 'add' : 'remove'; document.getElementById(`${t}-${base.r}-${base.c}`)?.classList[act]('wall-hover'); document.getElementById(`${t}-${t=='h'?base.r:base.r+1}-${t=='h'?base.c+1:base.c}`)?.classList[act]('wall-hover'); if(document.getElementById(`i-${base.r}-${base.c}`)) document.getElementById(`i-${base.r}-${base.c}`).classList[act]('wall-hover'); }
-    function chkW(r, c, t) { if (r < 0 || c < 0 || r >= S - 1 || c >= S - 1 || (cur === 1 ? p1.w : p2.w) <= 0) return false; if (t === 'h') { if (hW[r][c] || (c < S - 2 && hW[r][c+1]) || (c > 0 && hW[r][c-1]) || vW[r][c]) return false; } else { if (vW[r][c] || (r < S - 2 && vW[r+1][c]) || (r > 0 && vW[r-1][c]) || hW[r][c]) return false; } return true; }
+    window.getBaseCoord = function(r, c, t) { if (t === 'h') { if (c === S - 1) c--; else if (c > 0 && hW[r][c-1]) c--; else if (c < S - 2 && !chkW(r, c, 'h') && chkW(r, c-1, 'h')) c--; } else { if (r === S - 1) r--; else if (r > 0 && vW[r-1][c]) r--; else if (r < S - 2 && !chkW(r, c, 'v') && chkW(r - 1, c, 'v')) r--; } return { r, c }; }
+    window.hover = function(r, c, t, isIn) { let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; let act = isIn ? 'add' : 'remove'; document.getElementById(`${t}-${base.r}-${base.c}`)?.classList[act]('wall-hover'); document.getElementById(`${t}-${t=='h'?base.r:base.r+1}-${t=='h'?base.c+1:base.c}`)?.classList[act]('wall-hover'); }
+    window.chkW = function(r, c, t) { if (r < 0 || c < 0 || r >= S - 1 || c >= S - 1 || (cur === 1 ? p1.w : p2.w) <= 0) return false; if (t === 'h') { if (hW[r][c] || (c < S - 2 && hW[r][c+1]) || (c > 0 && hW[r][c-1]) || vW[r][c]) return false; } else { if (vW[r][c] || (r < S - 2 && vW[r+1][c]) || (r > 0 && vW[r-1][c]) || hW[r][c]) return false; } return true; }
     
-    function placeWall(r, c, t) { 
+    window.placeWall = function(r, c, t) { 
         let base = getBaseCoord(r, c, t); if (!chkW(base.r, base.c, t) || !checkPathWithWall(base.r, base.c, t)) return; 
         if (t === 'h') hW[base.r][base.c] = cur; else vW[base.r][base.c] = cur; 
         if (cur === 1) { p1.w--; statP1.w++; } else { p2.w--; statP2.w++; } 
-        if (gameMode === "online") { cur = cur === 1 ? 2 : 1; mode = 'move'; sync(); } else switchTurn();
+        switchTurn(); 
     }
-    function isW(r1, c1, r2, c2) { if (r1 === r2) { let m = Math.min(c1, c2); return (r1 < S - 1 && vW[r1][m]) || (r1 > 0 && vW[r1-1][m]); } else { let m = Math.min(r1, r2); return (c1 < S - 1 && hW[m][c1]) || (c1 > 0 && hW[m][c1-1]); } }
+    window.isW = function(r1, c1, r2, c2) { if (r1 === r2) { let m = Math.min(c1, c2); return (r1 < S - 1 && vW[r1][m]) || (r1 > 0 && vW[r1-1][m]); } else { let m = Math.min(r1, r2); return (c1 < S - 1 && hW[m][c1]) || (c1 > 0 && hW[m][c1-1]); } }
+    window.switchTurn = function() { if (gameMode === "online") { cur = cur === 1 ? 2 : 1; mode = 'move'; syncOnline(); } else { cur = cur === 1 ? 2 : 1; mode = 'move'; updateButtons(); nextTurnLogic(); } }
+    window.nextTurnLogic = function() {
+        sTxt.innerText = `Ход ${cur === 1 ? 'Синего' : 'Красного'}`;
+        wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`;
+        draw();
+        if (gameMode === 'ai' && cur === 2 && !over) { setTimeout(makeAiMove, 600); }
+    }
 
-    function switchTurn() { cur = cur === 1 ? 2 : 1; mode = 'move'; updateButtons(); nextTurnLogic(); }
-    function nextTurnLogic() { sTxt.innerText = `Ход ${cur === 1 ? 'Синего' : 'Красного'}`; wTxt.innerText = `Стены Синего: ${p1.w} | Красного: ${p2.w}`; draw(); if (gameMode === 'ai' && cur === 2 && !over) { setTimeout(makeAiMove, 600); } }
-
-    function makeAiMove() {
-        let moves = getMoves(2); if (moves.length === 0) { switchTurn(); return; }
+    window.makeAiMove = function() {
+        let moves = getMoves(2);
+        if (moves.length === 0) { switchTurn(); return; }
         if (aiDiff === 'easy' || p2.w === 0) {
             let m = moves[Math.floor(Math.random() * moves.length)]; p2.r = m.r; p2.c = m.c; statP2.m++;
         } else {
             let bestMove = null; let minPath = 999;
-            moves.forEach(m => { let dist = getShortestPathLen(m.r, m.c, S - 1); if (dist < minPath) { minPath = dist; bestMove = m; } });
+            moves.forEach(m => {
+                let dist = getShortestPathLen(m.r, m.c, S - 1);
+                if (dist < minPath) { minPath = dist; bestMove = m; }
+            });
             if (!bestMove) bestMove = moves[0];
             let playerDist = getShortestPathLen(p1.r, p1.c, 0);
-            if (aiDiff === 'hard' && playerDist < minPath && Math.random() > 0.4) { let wallPlaced = tryPlaceStrategicWall(); if (wallPlaced) return; }
+            if (aiDiff === 'hard' && playerDist < minPath && Math.random() > 0.4) {
+                let wallPlaced = tryPlaceStrategicWall(); if (wallPlaced) return;
+            }
             p2.r = bestMove.r; p2.c = bestMove.c; statP2.m++;
         }
         if (p2.r === S - 1) showEnd(2); else switchTurn();
     }
 
-    function tryPlaceStrategicWall() {
+    window.tryPlaceStrategicWall = function() {
         for (let attempt = 0; attempt < 30; attempt++) {
-            let r = p1.r - (Math.random() > 0.5 ? 0 : 1); let c = p1.c + Math.floor(Math.random() * 3) - 1; let type = Math.random() > 0.5 ? 'h' : 'v';
-            if (chkW(r, c, type) && checkPathWithWall(r, c, type)) { if (type === 'h') hW[r][c] = 2; else vW[r][c] = 2; p2.w--; statP2.w++; switchTurn(); return true; }
-        } return false;
+            let r = p1.r - (Math.random() > 0.5 ? 0 : 1);
+            let c = p1.c + Math.floor(Math.random() * 3) - 1;
+            let type = Math.random() > 0.5 ? 'h' : 'v';
+            if (chkW(r, c, type) && checkPathWithWall(r, c, type)) {
+                if (type === 'h') hW[r][c] = 2; else vW[r][c] = 2;
+                p2.w--; statP2.w++; switchTurn(); return true;
+            }
+        }
+        return false;
     }
 
-    function getMoves(playerNum) {
+    window.getMoves = function(playerNum) {
         let a = playerNum === 1 ? p1 : p2, o = playerNum === 1 ? p2 : p1, m = [], dirs = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
         dirs.forEach(d => {
             let nr = a.r + d.dr, nc = a.c + d.dc; if (nr >= 0 && nr < S && nc >= 0 && nc < S) {
@@ -310,7 +334,7 @@
         }); return m;
     }
 
-    function getShortestPathLen(sR, sC, tR) {
+    window.getShortestPathLen = function(sR, sC, tR) {
         let q = [{r: sR, c: sC, d: 0}], v = Array(S).fill().map(() => Array(S).fill(false)); v[sR][sC] = true;
         while(q.length > 0) {
             let curr = q.shift(); if (curr.r === tR) return curr.d;
@@ -322,8 +346,19 @@
         } return 99;
     }
 
-    function checkPathWithWall(r, c, t) { if (t === 'h') hW[r][c] = true; else vW[r][c] = true; let p1V = getShortestPathLen(p1.r, p1.c, 0) < 99, p2V = getShortestPathLen(p2.r, p2.c, S - 1) < 99; if (t === 'h') hW[r][c] = false; else vW[r][c] = false; return p1V && p2V; }
-    function showEnd(wNum) { over = true; mode = 'none'; updateButtons(); draw(); if (pollInterval) clearInterval(pollInterval); if(wNum === 1) scoreP1++; else scoreP2++; let label = (wNum === 1) ? 'Синий (Вы) 🎉' : (gameMode === 'ai' ? 'Компьютер 🤖' : 'Красный 🎉'); document.getElementById('md-winner').innerText = `Победил: ${label}`; document.getElementById('md-score').innerText = `Общий счёт сессии: ${scoreP1} : ${scoreP2}`; document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; document.getElementById('result-modal').classList.add('active'); }
+    window.checkPathWithWall = function(r, c, t) { if (t === 'h') hW[r][c] = true; else vW[r][c] = true; let p1V = getShortestPathLen(p1.r, p1.c, 0) < 99, p2V = getShortestPathLen(p2.r, p2.c, S - 1) < 99; if (t === 'h') hW[r][c] = false; else vW[r][c] = false; return p1V && p2V; }
+    
+    window.showEnd = function(winnerNum) { 
+        over = true; mode = 'none'; updateButtons(); draw();
+        if(winnerNum === 1) scoreP1++; else scoreP2++;
+        let label = (winnerNum === 1) ? 'Синий (Вы) 🎉' : (gameMode === 'ai' ? 'Компьютер 🤖' : 'Красный 🎉');
+        document.getElementById('md-winner').innerText = `Победил: ${label}`; 
+        document.getElementById('md-score').innerText = `Общий счёт сессии: ${scoreP1} : ${scoreP2}`;
+        document.getElementById('st-m1').innerText = statP1.m; document.getElementById('st-m2').innerText = statP2.m; 
+        document.getElementById('st-w1').innerText = statP1.w; document.getElementById('st-w2').innerText = statP2.w; 
+        document.getElementById('result-modal').classList.add('active'); 
+        if (gameMode === "online") { syncOnline(); }
+    }
 </script>
 </body>
 </html>
