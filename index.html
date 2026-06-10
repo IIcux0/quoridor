@@ -34,15 +34,28 @@
     </style>
 </head>
 <body>
-    <div id="menu-screen" class="screen active">
-        <div class="menu-card">
+            <div class="menu-card">
             <h1>Коридор</h1>
             <div class="setting-row"><span>Режим игры:</span>
-                <select id="cfg-mode">
+                <!-- Добавили переключение режимов и вызов функции настройки меню -->
+                <select id="cfg-mode" onchange="updateMenuSteps()">
                     <option value="pvp" selected>На двоих (один экран)</option>
+                    <option value="online">Онлайн игра (по сети)</option>
                 </select>
             </div>
-            <div id="extended-settings">
+
+            <!-- Новая скрытая панель для онлайн-режима -->
+            <div id="online-panel" style="display: none; border-top: 2px dashed #bdc3c7; margin-top: 15px; padding-top: 10px;">
+                <button class="btn-main" onclick="initOnlineGame(true)">🏠 Создать новую комнату</button>
+                <div style="margin: 10px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
+                <div class="setting-row">
+                    <input type="text" id="room-input" style="text-transform: uppercase;" placeholder="ВВЕДИТЕ ID КОМНАТЫ">
+                </div>
+                <button class="btn-main" style="background: #2ecc71;" onclick="initOnlineGame(false)">⚔️ Войти в комнату</button>
+            </div>
+
+            <!-- Блок extended-settings переименовали в id="local-settings" для точечного скрытия -->
+            <div id="local-settings">
                 <div class="setting-row"><span>Размер поля:</span>
                     <select id="cfg-size">
                         <option value="7">7 х 7 (Быстрая)</option>
@@ -53,20 +66,9 @@
                 <div class="setting-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
                 <button class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
             </div>
+            <!-- Сюда выводится ID комнаты -->
+            <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
         </div>
-    </div>
-    <div id="game-screen" class="screen">
-        <div id="game-info">
-            <div id="status">Ход Синего (Игрок 1)</div>
-            <div id="w-count">Стены Синего: 10 | Красного: 10</div>
-        </div>
-        <div id="board"></div>
-        <div id="controls">
-            <button id="btn-wall-h" onclick="toggleWallMode('wall-h')">➖ Горизонтальная</button>
-            <button id="btn-wall-v" onclick="toggleWallMode('wall-v')">┃ Вертикальная</button>
-            <button id="btn-menu" style="background:#e74c3c; color:white;" onclick="location.reload()">🚪 В меню</button>
-        </div>
-    </div>
 
     <div id="result-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10; align-items: center; justify-content: center;">
         <div class="menu-card" style="max-width: 380px;">
@@ -82,14 +84,94 @@
     </div>
 
     <script>
-        let state = { size: 9, maxWalls: 10, currentTurn: 1, p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 }, wallsH: [], wallsV: [], wallMode: null };
+        let state = { 
+            size: 9, maxWalls: 10, currentTurn: 1, 
+            mode: 'pvp', myPlayerId: 1, // Новые параметры для сети
+            p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 }, 
+            wallsH: [], wallsV: [], wallMode: null 
+        };
         let matchTimer = null; let totalGameTime = 0;
+        
+        // Новые переменные для сетевых каналов
+        let activeSocket = null;
+        let onlineRoomId = "";
+
+        // Функция плавного переключения блоков меню
+        function updateMenuSteps() {
+            const mode = document.getElementById('cfg-mode').value;
+            document.getElementById('online-panel').style.display = mode === 'online' ? 'block' : 'none';
+            document.getElementById('local-settings').style.display = mode === 'pvp' ? 'block' : 'none';
+            document.getElementById('menu-status').innerText = "";
+        }
 
         function initGame() {
-            state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
-            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 }; state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.mode = 'pvp'; state.myPlayerId = 1;
+            state.size = parseInt(document.getElementById('cfg-size').value); 
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            startOnlineMatch();
+        }
+
+        // Запуск сетевой игры через неблокируемые WebSockets
+        function initOnlineGame(isHost) {
+            const statusLabel = document.getElementById('menu-status');
+            statusLabel.innerText = "Подключение к сети..."; statusLabel.style.color = "#3498db";
+            state.mode = 'online';
+            state.size = 9; state.maxWalls = 10; // Фиксируем классику для онлайна
+
+            // Глобальный защищенный шлюз, открытый для всех стран и провайдеров
+            activeSocket = new WebSocket("wss://://piesocket.com");
+
+            if (isHost) {
+                state.myPlayerId = 1; // Создатель играет за Синего
+                onlineRoomId = Math.random().toString(36).substr(2, 5).toUpperCase();
+                
+                activeSocket.onopen = () => {
+                    statusLabel.innerText = `ID для друга: ${onlineRoomId}`; statusLabel.style.color = "#2ecc71";
+                    document.getElementById('menu-status').innerText = `ID для друга: ${onlineRoomId}`;
+                };
+            } else {
+                state.myPlayerId = 2; // Гость играет за Красного
+                const roomId = document.getElementById('room-input').value.trim().toUpperCase();
+                if (!roomId) { statusLabel.innerText = "Введите ID комнаты!"; statusLabel.style.color = "#e74c3c"; return; }
+                onlineRoomId = roomId;
+
+                activeSocket.onopen = () => {
+                    statusLabel.innerText = "Вход в комнату...";
+                    // Гость отправляет в сеть сигнал о подключении
+                    activeSocket.send(JSON.stringify({ type: "JOIN", room: onlineRoomId, size: state.size, maxWalls: state.maxWalls }));
+                };
+            }
+
+            activeSocket.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.room !== onlineRoomId) return; // Игнорируем чужие матчи
+
+                    if (msg.type === "JOIN" && isHost) {
+                        statusLabel.innerText = "Игрок подключился! Начинаем...";
+                        // Хост отвечает гостю и запускает игру у обоих одновременно
+                        activeSocket.send(JSON.stringify({ type: "START", room: onlineRoomId, size: state.size, maxWalls: state.maxWalls }));
+                        startOnlineMatch();
+                    } else if (msg.type === "START" && !isHost) {
+                        startOnlineMatch();
+                    } else if (msg.type === "MOVE" && msg.sender !== state.myPlayerId) {
+                        const opp = state.currentTurn === 1 ? state.p1 : state.p2;
+                        opp.r = msg.r; opp.c = msg.c; opp.moves++; checkWinOrSwitch();
+                    } else if (msg.type === "WALL" && msg.sender !== state.myPlayerId) {
+                        if (msg.wallType === 'h') { state.wallsH[msg.r][msg.c] = 1; } else { state.wallsV[msg.r][msg.c] = 1; }
+                        renderNetworkWall(msg.wallType, msg.r, msg.c, state.currentTurn);
+                        const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+                    }
+                } catch(e) {}
+            };
+        }
+
+        function startOnlineMatch() {
+            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
+
 
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
@@ -167,8 +249,10 @@
         }
 
         function placeWall(type, r, c) {
+            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return;
             if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
-            const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
+            const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c;
+            if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; if (cur.walls <= 0) return;
             if (type === 'h' && (state.wallsH[hr][hc] || (hc > 0 && state.wallsH[hr][hc-1]) || (hc < state.size - 2 && state.wallsH[hr][hc+1]) || state.wallsV[hr][hc])) return;
             if (type === 'v' && (state.wallsV[hr][hc] || (hr > 0 && state.wallsV[hr-1][hc]) || (hr < state.size - 2 && state.wallsV[hr+1][hc]) || state.wallsH[hr][hc])) return;
@@ -178,10 +262,35 @@
                 if (type === 'h') { state.wallsH[hr][hc] = 0; } else { state.wallsV[hr][hc] = 0; }
                 alert("Нельзя полностью перекрывать проход к финишу!"); return;
             }
-            const cls = state.currentTurn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
-            const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
-            const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
+            renderNetworkWall(type, hr, hc, state.currentTurn);
+            
+            // Отправка построенной стены сопернику по сети
+            if (state.mode === 'online' && activeSocket) {
+                activeSocket.send(JSON.stringify({ type: "WALL", room: onlineRoomId, sender: state.myPlayerId, wallType: type, r: hr, c: hc }));
+            }
             cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
+        }
+
+        function handleCellClick(r, c) {
+            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return;
+            if (state.wallMode) return;
+            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+            if (!cell || !cell.classList.contains('valid-move')) return;
+            const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
+            
+            // Отправка шага фишки сопернику по сети
+            if (state.mode === 'online' && activeSocket) {
+                activeSocket.send(JSON.stringify({ type: "MOVE", room: onlineRoomId, sender: state.myPlayerId, r: r, c: c }));
+            }
+            checkWinOrSwitch();
+        }
+
+        function renderNetworkWall(type, r, c, turn) {
+            const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
+            const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`);
+            const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
+            const inter = document.getElementById(`x-${r}-${c}`);
+            [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
         }
 
         function hasPath(startR, startC, targetRow) {
@@ -198,11 +307,6 @@
             return false;
         }
 
-        function handleCellClick(r, c) {
-            if (state.wallMode) return; const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
-            const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++; checkWinOrSwitch();
-        }
-
         function checkWinOrSwitch() {
             if (state.p1.r === 0) { finishGame(1); return; } if (state.p2.r === state.size - 1) { finishGame(2); return; }
             state.currentTurn = state.currentTurn === 1 ? 2 : 1; updateView();
@@ -211,12 +315,13 @@
         function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
 
         function finishGame(winner) {
-            clearInterval(matchTimer);
+            clearInterval(matchTimer); if (state.mode === 'online' && activeSocket) activeSocket.close();
             document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆'; document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
             document.getElementById('st-m1').innerText = state.p1.moves; document.getElementById('st-m2').innerText = state.p2.moves;
             document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls; document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
             document.getElementById('st-total-time').innerText = totalGameTime + 'с'; document.getElementById('result-modal').style.display = 'flex';
         }
+        function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).mathbf.classList.add('active'); }
         function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
     </script>
 </body>
