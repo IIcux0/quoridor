@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Коридор — Локальное Издание</title>
-    <script src="https://unpkg.com"></script>
+        <!-- Подключаем Firebase App и Realtime Database -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
@@ -104,6 +107,22 @@
         </div>
     </div>
     <script>
+        // Конфигурация вашего проекта Google Firebase
+        const firebaseConfig = {
+            apiKey: "ВАШ_API_KEY",
+            authDomain: "ВАШ_PROJECT_://firebaseapp.com",
+            databaseURL: "https://ВАШ_PROJECT_://firebaseio.com", // Ссылка на вашу базу
+            projectId: "ВАШ_PROJECT_ID",
+            storageBucket: "ВАШ_PROJECT_://appspot.com",
+            messagingSenderId: "ВАШ_SENDER_ID",
+            appId: "ВАШ_APP_ID"
+        };
+
+        // Инициализируем Firebase в приложении
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let roomRef = null; // Ссылка на текущую комнату в базе данных
+
         let state = { 
             size: 9, maxWalls: 10, currentTurn: 1, 
             mode: 'pvp', myPlayerId: 1, // Новые сетевые переменные
@@ -136,24 +155,15 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Создаем узел на публичных серверах PeerJS
-            peer = new Peer();
-
-            if (isHost) {
-                state.myPlayerId = 1; // Хост играет за Синего
-                peer.on('open', (id) => {
-                    statusLabel.innerText = `ID для друга: ${id}`; statusLabel.style.color = "#2ecc71";
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${id.toUpperCase()}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                });
-                peer.on('connection', (connection) => {
-                    conn = connection; setupNetworkListeners();
-                    statusLabel.innerText = "Игрок зашел! Старт матча...";
-                    setTimeout(() => {
-                        conn.send({ type: 'START', size: state.size, maxWalls: state.maxWalls });
-                        startOnlineMatch();
-                    }, 1000);
-                });
+            peer = new Peer({
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:://google.com' },
+                        { urls: 'stun:://google.com' },
+                        { urls: 'stun:stun.metered.ca:443' }
+                    ]
+                }
+            });
             } else {
                 state.myPlayerId = 2; // Гость играет за Красного
                 const targetId = document.getElementById('room-input').value.trim().toLowerCase();
