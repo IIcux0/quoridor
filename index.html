@@ -137,24 +137,20 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Используем стандартное прямое облако peerjs
-            peer = new Peer();
+            // Подключаемся к стабильному публичному серверу Metered
+            peer = new Peer({
+                host: '://peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true,
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:://google.com' },
+                        { urls: 'stun:://google.com' }
+                    ]
+                }
+            });
 
-            if (isHost) {
-                state.myPlayerId = 1;
-                peer.on('open', (id) => {
-                    statusLabel.innerText = `ID для друга: ${id}`; statusLabel.style.color = "#2ecc71";
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${id.toUpperCase()}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                });
-                peer.on('connection', (connection) => {
-                    conn = connection; setupNetworkListeners();
-                    statusLabel.innerText = "Игрок зашел! Старт матча...";
-                    setTimeout(() => {
-                        conn.send({ type: 'START', size: state.size, maxWalls: state.maxWalls });
-                        startOnlineMatch();
-                    }, 1000);
-                });
             } else {
                 state.myPlayerId = 2;
                 const targetId = document.getElementById('room-input').value.trim().toLowerCase();
@@ -305,14 +301,28 @@
         }
 
         function handleCellClick(r, c) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if (state.wallMode) return;
-            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
-            const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
+            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; 
+            if (state.wallMode) return; 
+            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+            if (!cell || !cell.classList.contains('valid-move')) return;
+            
+            const cur = state.currentTurn === 1 ? state.p1 : state.p2; 
+            cur.r = r; cur.c = c; 
+            cur.moves = (cur.moves || 0) + 1; // Защита от NaN при первом ходе
+            
             if (state.mode === 'online' && conn) { conn.send({ type: 'MOVE', r: r, c: c }); }
             checkWinOrSwitch();
         }
 
-        function checkWinOrSwitch() { if (state.p1.r === 0) { finishGame(1); return; } if (state.p2.r === state.size - 1) { finishGame(2); return; } state.currentTurn = state.currentTurn === 1 ? 2 : 1; updateView(); }
+        function checkWinOrSwitch() {
+            // Четкая проверка: Синий (P1) дошел до строки 0, Красный (P2) — до конца поля
+            if (state.p1.r <= 0) { finishGame(1); return; }
+            if (state.p2.r >= state.size - 1) { finishGame(2); return; }
+            
+            // Если никто не выиграл, меняем ход
+            state.currentTurn = state.currentTurn === 1 ? 2 : 1; 
+            updateView();
+        }
         function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
         function finishGame(winner) {
             clearInterval(matchTimer);
