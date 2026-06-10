@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Коридор — Локальное Издание</title>
+    <script src="https://unpkg.com"></script>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
@@ -40,10 +41,24 @@
         <div class="menu-card">
             <h1>Коридор</h1>
             <div class="setting-row"><span>Режим игры:</span>
-                <select id="cfg-mode">
+                <!-- Добавили переключение режимов и вызов функции настройки меню -->
+                <select id="cfg-mode" onchange="updateMenuSteps()">
                     <option value="pvp" selected>На двоих (один экран)</option>
+                    <option value="online">Онлайн игра (по сети)</option>
                 </select>
             </div>
+
+            <!-- Скрытая панель для онлайн-режима -->
+            <div id="online-panel" style="display: none; border-top: 2px dashed #bdc3c7; margin-top: 15px; padding-top: 10px;">
+                <button class="btn-main" onclick="initOnlineGame(true)">🏠 Создать новую комнату</button>
+                <div style="margin: 10px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
+                <div class="setting-row">
+                    <input type="text" id="room-input" style="text-transform: uppercase;" placeholder="ВВЕДИТЕ ID КОМНАТЫ">
+                </div>
+                <button class="btn-main" style="background: #2ecc71;" onclick="initOnlineGame(false)">⚔️ Войти в комнату</button>
+            </div>
+
+            <!-- Настройки поля -->
             <div id="extended-settings">
                 <div class="setting-row"><span>Размер поля:</span>
                     <select id="cfg-size">
@@ -53,13 +68,17 @@
                     </select>
                 </div>
                 <div class="setting-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
-                <button class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
+                <button id="btn-start-local" class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
             </div>
+            <!-- Сюда будут выводиться системные сообщения и ID комнаты -->
+            <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
         </div>
     </div>
     <!-- ИГРОВОЙ ЭКРАН -->
     <div id="game-screen" class="screen">
         <div id="game-info">
+            <!-- Строка для вывода ID комнаты во время сетевого матча -->
+            <div id="room-id-display" style="font-size: 14px; color: #7f8c8d; margin-bottom: 5px; font-weight: bold; display: none;"></div>
             <div id="status">Ход Синего (Игрок 1)</div>
             <div id="w-count">Стены Синего: 10 | Красного: 10</div>
         </div>
