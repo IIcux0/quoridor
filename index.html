@@ -85,37 +85,13 @@
         </div>
     </div>
     <script>
-        // Полностью настроенная конфигурация вашего проекта Supabase
-        const SUPABASE_URL = "https://supabase.co";
-        const SUPABASE_KEY = "sb_publishable_C44fvGvSPNnElOFZ0WAyDQ_nZniiuw1";
-
-        let supabase = null;
-        let currentRoomId = null;
-        let channel = null;
-
-        // ИСПРАВЛЕНО: Принудительно включаем Realtime-модуль без авторизации таблиц
-        try {
-            if (typeof supabase !== 'undefined') {
-                supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-                    auth: { persistSession: false },
-                    realtime: {
-                        params: {
-                            eventsPerSecond: 10
-                        }
-                    }
-                });
-            }
-        } catch (e) {
-            console.log("Supabase заблокирован локально, включен автономный режим.");
-        }
-
-
         let state = {
             size: 9, maxWalls: 10, currentTurn: 1, mode: 'pvp', myPlayerId: 1,
             p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 },
             wallsH: [], wallsV: [], wallMode: null
         };
         let matchTimer = null; let totalGameTime = 0;
+        let activeSocket = null; let onlineRoomId = "";
 
         function updateMenuSteps() {
             const mode = document.getElementById('cfg-mode').value;
@@ -124,8 +100,12 @@
             document.getElementById('menu-status').innerText = "";
         }
 
-        let activeSocket = null;
-        let onlineRoomId = "";
+        function initGame() {
+            state.mode = 'pvp'; state.myPlayerId = 1;
+            state.size = parseInt(document.getElementById('cfg-size').value);
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            startOnlineMatch();
+        }
 
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
@@ -134,13 +114,12 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Используем полностью открытый и рабочий публичный шлюз без лимитов ключей
-            activeSocket = new WebSocket("wss://echo.websocket.org");
+            // Подключаемся к стабильному публичному эхо-серверу веб-сокетов PieSocket
+            activeSocket = new WebSocket("wss://://piesocket.com");
 
             if (isHost) {
                 state.myPlayerId = 1;
                 onlineRoomId = Math.random().toString(36).substr(2, 5).toUpperCase();
-                
                 activeSocket.onopen = () => {
                     statusLabel.innerText = `ID для друга: ${onlineRoomId}`; statusLabel.style.color = "#2ecc71";
                     document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${onlineRoomId}`;
@@ -151,34 +130,34 @@
                 const roomId = document.getElementById('room-input').value.trim().toUpperCase();
                 if (!roomId) { statusLabel.innerText = "Введите ID!"; statusLabel.style.color = "#e74c3c"; return; }
                 onlineRoomId = roomId;
-
                 activeSocket.onopen = () => {
                     document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
                     document.getElementById('room-id-display').style.display = 'block';
-                    // Гость отправляет хосту сигнал на подключение
-                    activeSocket.send(JSON.stringify({ type: "JOIN", room: onlineRoomId, size: state.size, maxWalls: state.maxWalls }));
+                    activeSocket.send(JSON.stringify({ type: "JOIN", room: onlineRoomId, sender: 2, size: state.size, maxWalls: state.maxWalls }));
                 };
             }
 
             activeSocket.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
-                    if (msg.room !== onlineRoomId) return; // Игнорируем чужие комнаты
+                    if (msg.room !== onlineRoomId) return;
 
                     if (msg.type === "JOIN" && isHost) {
                         statusLabel.innerText = "Игрок подключился! Начинаем...";
-                        activeSocket.send(JSON.stringify({ type: "START", room: onlineRoomId, size: state.size, maxWalls: state.maxWalls }));
+                        activeSocket.send(JSON.stringify({ type: "START", room: onlineRoomId, sender: 1, size: state.size, maxWalls: state.maxWalls }));
                         startOnlineMatch();
                     } else if (msg.type === "START" && !isHost) {
                         state.size = msg.size; state.maxWalls = msg.maxWalls;
                         startOnlineMatch();
-                    } else if (msg.type === "MOVE") {
-                        const opp = state.currentTurn === 1 ? state.p1 : state.p2;
-                        opp.r = data.r; opp.c = data.c; opp.moves++; checkWinOrSwitch();
-                    } else if (msg.type === "WALL") {
-                        if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
-                        renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
-                        const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+                    } else if (msg.sender !== state.myPlayerId) { // Считываем ходы ТОЛЬКО от соперника
+                        if (msg.type === "MOVE") {
+                            const opp = state.currentTurn === 1 ? state.p1 : state.p2;
+                            opp.r = msg.r; opp.c = msg.c; opp.moves++; checkWinOrSwitch();
+                        } else if (msg.type === "WALL") {
+                            if (msg.wallType === 'h') { state.wallsH[msg.r][msg.c] = 1; } else { state.wallsV[msg.r][msg.c] = 1; }
+                            renderNetworkWall(msg.wallType, msg.r, msg.c, state.currentTurn);
+                            const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+                        }
                     }
                 } catch(e) {}
             };
@@ -189,7 +168,6 @@
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
-
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
             for (let i = 0; i < state.size; i++) { grid += 'auto ' + (i < state.size - 1 ? '12px ' : ''); }
@@ -255,10 +233,8 @@
             else if (c1 === c2) { const minR = Math.min(r1, r2); if (state.wallsH[minR] && state.wallsH[minR][c1]) return true; if (c1 > 0 && state.wallsH[minR] && state.wallsH[minR][c1 - 1]) return true; }
             return false;
         }
-
         function toggleWallMode(mode) { if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; state.wallMode = state.wallMode === mode ? null : mode; document.getElementById('btn-wall-h').classList.toggle('active', state.wallMode === 'wall-h'); document.getElementById('btn-wall-v').classList.toggle('active', state.wallMode === 'wall-v'); updateView(); }
         function getRealWallCoords(type, r, c) { let realR = r, realC = c; const maxIdx = state.size - 2; if (type === 'h') { if (c > maxIdx || (c === maxIdx && state.wallsH[r][c]) || (c < maxIdx && state.wallsH[r][c+1])) realC = c - 1; } else { if (r > maxIdx || (r === maxIdx && state.wallsV[r][c]) || (r < maxIdx && state.wallsV[r+1] && state.wallsV[r+1][c])) realR = r - 1; } return { r: realR, c: realC }; }
-
         function hoverWall(type, r, c, isEnter) {
             if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
@@ -268,6 +244,7 @@
             const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
             const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) el.classList.toggle('wall-hover', isEnter); });
         }
+
         function placeWall(type, r, c) {
             if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
@@ -281,12 +258,12 @@
                 alert("Нельзя полностью перекрывать проход к финишу!"); return;
             }
             renderNetworkWall(type, hr, hc, state.currentTurn);
-            
             if (state.mode === 'online' && activeSocket) {
-                activeSocket.send(JSON.stringify({ type: "WALL", room: onlineRoomId, wallType: type, r: hr, c: hc }));
+                activeSocket.send(JSON.stringify({ type: "WALL", room: onlineRoomId, sender: state.myPlayerId, wallType: type, r: hr, c: hc }));
             }
             cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
         }
+
         function renderNetworkWall(type, r, c, turn) {
             const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
             const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
@@ -311,9 +288,8 @@
             if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if (state.wallMode) return;
             const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
-            
             if (state.mode === 'online' && activeSocket) {
-                activeSocket.send(JSON.stringify({ type: "MOVE", room: onlineRoomId, r: r, c: c }));
+                activeSocket.send(JSON.stringify({ type: "MOVE", room: onlineRoomId, sender: state.myPlayerId, r: r, c: c }));
             }
             checkWinOrSwitch();
         }
@@ -326,7 +302,7 @@
         function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
 
         function finishGame(winner) {
-            clearInterval(matchTimer); if (state.mode === 'online' && channel) channel.unsubscribe();
+            clearInterval(matchTimer); if (state.mode === 'online' && activeSocket) activeSocket.close();
             document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆'; document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
             document.getElementById('st-m1').innerText = state.p1.moves; document.getElementById('st-m2').innerText = state.p2.moves;
             document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls; document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
