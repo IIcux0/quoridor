@@ -2,9 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Коридоры — Онлайн Издание</title>
-    <!-- Подключаем официальную бесплатную библиотеку для P2P соединения -->
-    <script src="https://unpkg.com"></script>
+    <title>Коридор — Локальное Издание</title>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
@@ -13,30 +11,23 @@
         h1 { margin-top: 0; color: #2c3e50; font-size: 26px; margin-bottom: 20px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; font-size: 15px; font-weight: bold; color: #555; }
         .setting-row select, .setting-row input { box-sizing: border-box; padding: 6px; width: 190px; height: 36px; border: 2px solid #bdc3c7; border-radius: 6px; font-size: 14px; font-weight: bold; text-align: center; }
-        #room-input { text-transform: uppercase; }
         #game-info { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; font-weight: bold; }
         #status { font-size: 20px; margin-bottom: 4px; text-align: center; color: #3498db; }
         #w-count { font-size: 15px; color: #555; margin: 2px 0; }
         #board { display: grid; background: #64574a; padding: 10px; border-radius: 6px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
         .cell { background: #cdc1b4; border-radius: 3px; display: flex; justify-content: center; align-items: center; position: relative; width: 50px; height: 50px; }
         .cell.goal-blue { background: #d6eaf8; } .cell.goal-red { background: #fadbd8; }  
-        
         .wall-space-h, .wall-space-v { background: #8d7d6f; cursor: pointer; }
         .wall-space-intersection { background: #8d7d6f; }
-        
         .wall-active { opacity: 1 !important; }
-        .wall-p1 { background: #3498db !important; } 
-        .wall-p2 { background: #e74c3c !important; }
+        .wall-p1 { background: #3498db !important; } .wall-p2 { background: #e74c3c !important; }
         .wall-hover { background: #f39c12 !important; opacity: 0.7; }
-
         .cell.valid-move { cursor: pointer; }
         .cell.valid-move::after { content: ''; width: 40%; height: 40%; background: rgba(0, 0, 0, 0.25); border-radius: 50%; position: absolute; }
         .cell.valid-move:hover::after { background: rgba(0, 0, 0, 0.4); width: 50%; height: 50%; transition: all 0.1s ease; }
-        
         .player { border-radius: 50%; z-index: 2; box-shadow: 0 3px 6px rgba(0,0,0,0.4); width: 70%; height: 70%; }
         .p1 { background: #3498db; } .p2 { background: #e74c3c; }
         #controls { margin-top: 15px; display: flex; gap: 10px; }
-        
         button { padding: 10px 16px; font-size: 14px; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         button.active { background: #2ecc71; color: white; }
         .btn-main { background: #3498db; color: white; width: 100%; margin-top: 10px; padding: 12px; font-size: 16px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(52,152,219,0.3); }
@@ -44,31 +35,15 @@
 </head>
 <body>
 
-
-
     <!-- ГЛАВНОЕ МЕНЮ -->
     <div id="menu-screen" class="screen active">
         <div class="menu-card">
-            <h1>Коридоры</h1>
+            <h1>Коридор</h1>
             <div class="setting-row"><span>Режим игры:</span>
-                <!-- Добавили выбор онлайн-режима -->
-                <select id="cfg-mode" onchange="updateMenuSteps()">
+                <select id="cfg-mode">
                     <option value="pvp" selected>На двоих (один экран)</option>
-                    <option value="online">Онлайн игра (по сети)</option>
                 </select>
             </div>
-
-            <!-- Дополнительная панель для Онлайн-режима -->
-            <div id="online-panel" style="display: none; border-top: 2px dashed #bdc3c7; margin-top: 15px; padding-top: 10px;">
-                <button class="btn-main" onclick="initOnlineGame(true)">🏠 Создать новую комнату</button>
-                <div style="margin: 10px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
-                <div class="setting-row">
-                    <input type="text" id="room-input" placeholder="ВВЕДИТЕ ID КОМНАТЫ">
-                </div>
-                <button class="btn-main" style="background: #2ecc71;" onclick="initOnlineGame(false)">⚔️ Войти в комнату</button>
-            </div>
-
-            <!-- Локальные настройки, прячутся, если заходит гость -->
             <div id="extended-settings">
                 <div class="setting-row"><span>Размер поля:</span>
                     <select id="cfg-size">
@@ -78,17 +53,13 @@
                     </select>
                 </div>
                 <div class="setting-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
-                <button id="btn-start-local" class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
+                <button class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
             </div>
-            <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
         </div>
     </div>
-
     <!-- ИГРОВОЙ ЭКРАН -->
     <div id="game-screen" class="screen">
         <div id="game-info">
-            <!-- Плашка отображения текущего ID комнаты в игре -->
-            <div id="room-id-display" style="font-size: 14px; color: #7f8c8d; margin-bottom: 5px; font-weight: bold;"></div>
             <div id="status">Ход Синего (Игрок 1)</div>
             <div id="w-count">Стены Синего: 10 | Красного: 10</div>
         </div>
@@ -110,123 +81,25 @@
                 <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px 0; font-weight: bold; color:#555;">Построено стен</td><td id="st-w1" style="font-weight: bold;">0</td><td id="st-w2" style="font-weight: bold;">0</td></tr>
                 <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px 0; font-weight: bold; color:#555;" colspan="2">Общее время матча:</td><td id="st-total-time" style="font-weight: bold; text-align: right; color: #2c3e50;">0с</td></tr>
             </table>
-            <button class="btn-main" onclick="location.reload()">🚪 Выйти в меню</button>
+            <button class="btn-main" onclick="location.reload()">🔄 Начать заново</button>
         </div>
     </div>
-
-
     <script>
-        let state = {
-            size: 9, maxWalls: 10, currentTurn: 1, mode: 'pvp', myPlayerId: 1,
-            p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 },
-            wallsH: [], wallsV: [], wallMode: null
-        };
-        let peer = null, conn = null, matchTimer = null, totalGameTime = 0;
-
-        function updateMenuSteps() {
-            const mode = document.getElementById('cfg-mode').value;
-            document.getElementById('online-panel').style.display = mode === 'online' ? 'block' : 'none';
-            document.getElementById('extended-settings').style.display = mode === 'pvp' ? 'block' : 'none';
-            document.getElementById('menu-status').innerText = "";
-        }
-        function initOnlineGame(isHost) {
-            const statusLabel = document.getElementById('menu-status');
-            statusLabel.innerText = "Подключение к сети..."; statusLabel.style.color = "#3498db";
-            state.mode = 'online';
-            state.size = parseInt(document.getElementById('cfg-size').value);
-            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
-
-            // ИСПОЛЬЗУЕМ СТАБИЛЬНЫЙ ПУБЛИЧНЫЙ СЕРВЕР ИЗ ГЕРМАНИИ (БЕЗ СБОЕВ)
-            peer = new Peer({
-                host: 'peerjs.com',
-                port: 443,
-                path: '/',
-                secure: true,
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:://google.com' },
-                        { urls: 'stun:://google.com' }
-                    ]
-                }
-            });
-
-            if (isHost) {
-                state.myPlayerId = 1;
-                peer.on('open', (id) => {
-                    statusLabel.innerText = `ID для друга: ${id}`; statusLabel.style.color = "#2ecc71";
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${id.toUpperCase()}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                });
-                peer.on('connection', (connection) => {
-                    conn = connection; setupNetworkListeners();
-                    statusLabel.innerText = "Игрок зашел! Старт матча...";
-                    setTimeout(() => {
-                        conn.send({ type: 'START', size: state.size, maxWalls: state.maxWalls });
-                        startOnlineMatch();
-                    }, 1000);
-                });
-            } else {
-                state.myPlayerId = 2;
-                const targetId = document.getElementById('room-input').value.trim().toLowerCase();
-                if (!targetId) { statusLabel.innerText = "Введите ID комнаты!"; statusLabel.style.color = "#e74c3c"; return; }
-                peer.on('open', () => { conn = peer.connect(targetId); setupNetworkListeners(); });
-                peer.on('error', () => { statusLabel.innerText = "Ошибка подключения!"; statusLabel.style.color = "#e74c3c"; });
-            }
-        }
-
-        function setupNetworkListeners() {
-            conn.on('open', () => {
-                document.getElementById('menu-status').innerText = "Подключено к игре!";
-                document.getElementById('menu-status').style.color = "#2ecc71";
-            });
-            conn.on('data', (data) => {
-                if (data.type === 'START') {
-                    state.size = data.size; state.maxWalls = data.maxWalls;
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${conn.peer.toUpperCase()}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                    startOnlineMatch();
-                } else if (data.type === 'MOVE') {
-                    const opp = state.currentTurn === 1 ? state.p1 : state.p2;
-                    opp.r = data.r; opp.c = data.c; opp.moves++; checkWinOrSwitch();
-                } else if (data.type === 'WALL') {
-                    if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
-                    renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
-                    const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
-                }
-            });
-        }
-
-        function startOnlineMatch() {
-            // ИСПРАВЛЕНО: Четко задаем стартовые ячейки в зависимости от размера поля
-            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
-            state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
-            state.currentTurn = 1; 
-            state.wallMode = null; 
-            
-            buildBoard(); 
-            switchScreen('game-screen'); 
-            startTimer();
-        }
-
+        let state = { size: 9, maxWalls: 10, currentTurn: 1, p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 }, wallsH: [], wallsV: [], wallMode: null };
+        let matchTimer = null; let totalGameTime = 0;
 
         function initGame() {
-            state.size = parseInt(document.getElementById('cfg-size').value);
-            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
-            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
-            state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
-            state.currentTurn = 1; state.wallMode = null;
-            
-            buildBoard(); 
-            switchScreen('game-screen');
-            startTimer(); // <- ПРЯМОЙ ЗАПУСК ТАЙМЕРА ТЕПЕРЬ ТУТ
+            state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 }; state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
-        
+
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
             for (let i = 0; i < state.size; i++) { grid += 'auto ' + (i < state.size - 1 ? '12px ' : ''); }
             board.style.gridTemplateColumns = grid; board.style.gridTemplateRows = grid;
-            state.wallsH = Array(state.size - 1).fill().map(() => Array(state.size - 1).fill(0));
-            state.wallsV = Array(state.size - 1).fill().map(() => Array(state.size - 1).fill(0));
+            state.wallsH = Array(state.size - 1).fill().map(() => Array(state.size - 1).fill(0)); state.wallsV = Array(state.size - 1).fill().map(() => Array(state.size - 1).fill(0));
+
             for (let r = 0; r < state.size * 2 - 1; r++) {
                 for (let c = 0; c < state.size * 2 - 1; c++) {
                     const isCellR = r % 2 === 0, isCellC = c % 2 === 0;
@@ -247,7 +120,6 @@
             }
             setTimeout(updateView, 50);
         }
-
         function updateView() {
             document.querySelectorAll('.player').forEach(p => p.remove()); document.querySelectorAll('.cell').forEach(c => c.classList.remove('valid-move'));
             const c1 = document.querySelector(`.cell[data-r="${state.p1.r}"][data-c="${state.p1.c}"]`); if (c1) { const p = document.createElement('div'); p.className = 'player p1'; c1.appendChild(p); }
@@ -255,7 +127,7 @@
             const txt = document.getElementById('status');
             if (state.currentTurn === 1) { txt.innerText = "Ход Синего (Игрок 1)"; txt.style.color = "#3498db"; } else { txt.innerText = "Ход Красного (Игрок 2)"; txt.style.color = "#e74c3c"; }
             document.getElementById('w-count').innerText = `Стены Синего: ${state.p1.walls} | Красного: ${state.p2.walls}`;
-            if (!state.wallMode && (state.mode === 'pvp' || state.currentTurn === state.myPlayerId)) showValidMoves();
+            if (!state.wallMode) showValidMoves();
         }
 
         function showValidMoves() {
@@ -278,16 +150,19 @@
                 }
             });
         }
+
         function markValid(r, c) { const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (cell) cell.classList.add('valid-move'); }
+        
         function isWallBetween(r1, c1, r2, c2) {
             if (r1 === r2) { const minC = Math.min(c1, c2); if (state.wallsV[r1] && state.wallsV[r1][minC]) return true; if (r1 > 0 && state.wallsV[r1 - 1] && state.wallsV[r1 - 1][minC]) return true; } 
             else if (c1 === c2) { const minR = Math.min(r1, r2); if (state.wallsH[minR] && state.wallsH[minR][c1]) return true; if (c1 > 0 && state.wallsH[minR] && state.wallsH[minR][c1 - 1]) return true; }
             return false;
         }
-        function toggleWallMode(mode) { if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; state.wallMode = state.wallMode === mode ? null : mode; document.getElementById('btn-wall-h').classList.toggle('active', state.wallMode === 'wall-h'); document.getElementById('btn-wall-v').classList.toggle('active', state.wallMode === 'wall-v'); updateView(); }
+
+        function toggleWallMode(mode) { state.wallMode = state.wallMode === mode ? null : mode; document.getElementById('btn-wall-h').classList.toggle('active', state.wallMode === 'wall-h'); document.getElementById('btn-wall-v').classList.toggle('active', state.wallMode === 'wall-v'); updateView(); }
         function getRealWallCoords(type, r, c) { let realR = r, realC = c; const maxIdx = state.size - 2; if (type === 'h') { if (c > maxIdx || (c === maxIdx && state.wallsH[r][c]) || (c < maxIdx && state.wallsH[r][c+1])) realC = c - 1; } else { if (r > maxIdx || (r === maxIdx && state.wallsV[r][c]) || (r < maxIdx && state.wallsV[r+1] && state.wallsV[r+1][c])) realR = r - 1; } return { r: realR, c: realC }; }
         function hoverWall(type, r, c, isEnter) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
+            if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
             if (type === 'h' && (state.wallsH[hr][hc] || (hc > 0 && state.wallsH[hr][hc-1]) || (hc < state.size - 2 && state.wallsH[hr][hc+1]) || state.wallsV[hr][hc])) return;
             if (type === 'v' && (state.wallsV[hr][hc] || (hr > 0 && state.wallsV[hr-1][hc]) || (hr < state.size - 2 && state.wallsV[hr+1][hc]) || state.wallsH[hr][hc])) return;
@@ -297,7 +172,7 @@
         }
 
         function placeWall(type, r, c) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
+            if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; if (cur.walls <= 0) return;
             if (type === 'h' && (state.wallsH[hr][hc] || (hc > 0 && state.wallsH[hr][hc-1]) || (hc < state.size - 2 && state.wallsH[hr][hc+1]) || state.wallsV[hr][hc])) return;
@@ -308,15 +183,10 @@
                 if (type === 'h') { state.wallsH[hr][hc] = 0; } else { state.wallsV[hr][hc] = 0; }
                 alert("Нельзя полностью перекрывать проход к финишу!"); return;
             }
-            renderNetworkWall(type, hr, hc, state.currentTurn);
-            if (state.mode === 'online' && conn) { conn.send({ type: 'WALL', wallType: type, r: hr, c: hc }); }
+            const cls = state.currentTurn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
+            const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
+            const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
             cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
-        }
-
-        function renderNetworkWall(type, r, c, turn) {
-            const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
-            const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
-            const inter = document.getElementById(`x-${r}-${c}`); [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
         }
 
         function hasPath(startR, startC, targetRow) {
@@ -334,38 +204,28 @@
         }
 
         function handleCellClick(r, c) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; 
-            if (state.wallMode) return; 
-            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
-            if (!cell || !cell.classList.contains('valid-move')) return;
-            
-            const cur = state.currentTurn === 1 ? state.p1 : state.p2; 
-            cur.r = r; cur.c = c; 
-            cur.moves = (cur.moves || 0) + 1; // Защита от NaN при первом ходе
-            
-            if (state.mode === 'online' && conn) { conn.send({ type: 'MOVE', r: r, c: c }); }
-            checkWinOrSwitch();
+            if (state.wallMode) return; const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
+            const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++; checkWinOrSwitch();
         }
 
         function checkWinOrSwitch() {
-            // Четкая проверка: Синий (P1) дошел до строки 0, Красный (P2) — до конца поля
-            if (state.p1.r <= 0) { finishGame(1); return; }
-            if (state.p2.r >= state.size - 1) { finishGame(2); return; }
-            
-            // Если никто не выиграл, меняем ход
-            state.currentTurn = state.currentTurn === 1 ? 2 : 1; 
-            updateView();
+            if (state.p1.r === 0) { finishGame(1); return; } if (state.p2.r === state.size - 1) { finishGame(2); return; }
+            state.currentTurn = state.currentTurn === 1 ? 2 : 1; updateView();
         }
+
         function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
+
         function finishGame(winner) {
             clearInterval(matchTimer);
-            document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆';
-            document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
+            document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆'; document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
             document.getElementById('st-m1').innerText = state.p1.moves; document.getElementById('st-m2').innerText = state.p2.moves;
             document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls; document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
             document.getElementById('st-total-time').innerText = totalGameTime + 'с'; document.getElementById('result-modal').style.display = 'flex';
         }
-        function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        function switchScreen(id) { 
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
+            document.getElementById(id).classList.add('active'); 
+        }
     </script>
 </body>
 </html>
