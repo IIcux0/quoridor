@@ -151,24 +151,49 @@
 
         function setupSupabaseChannel(roomId, isHost) {
             channel = supabase.channel('room_' + roomId, { config: { broadcast: { self: false } } });
-            channel.on('broadcast', { event: 'game_action' }, (payload) => {
-                const data = payload.payload;
+            
+            channel.on('broadcast', { event: 'game_action' }, (response) => {
+                // Защита: считываем данные независимо от того, как их упаковал сервер Supabase
+                const data = response.payload || response;
+                if (!data) return;
+
                 if (data.type === 'START' && !isHost) {
-                    state.size = data.size; state.maxWalls = data.maxWalls; startOnlineMatch();
+                    state.size = data.size; 
+                    state.maxWalls = data.maxWalls; 
+                    startOnlineMatch();
                 } else if (data.type === 'MOVE') {
                     const opp = state.currentTurn === 1 ? state.p1 : state.p2;
-                    opp.r = data.r; opp.c = data.c; opp.moves++; checkWinOrSwitch();
+                    opp.r = data.r; opp.c = data.c; opp.moves++; 
+                    checkWinOrSwitch();
                 } else if (data.type === 'WALL') {
                     if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
                     renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
-                    const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+                    const opp = state.currentTurn === 1 ? state.p1 : state.p2; 
+                    opp.walls--; 
+                    checkWinOrSwitch();
                 } else if (data.type === 'JOIN_REQ' && isHost) {
-                    channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'START', size: state.size, maxWalls: state.maxWalls } });
-                    document.getElementById('menu-status').innerText = "Игрок подключился!"; setTimeout(startOnlineMatch, 1000);
+                    // Хост услышал гостя и мгновенно высылает ему настройки карты для старта
+                    channel.send({
+                        type: 'broadcast',
+                        event: 'game_action',
+                        payload: { type: 'START', size: state.size, maxWalls: state.maxWalls }
+                    });
+                    document.getElementById('menu-status').innerText = "Игрок подключился! Старт...";
+                    document.getElementById('menu-status').style.color = "#2ecc71";
+                    setTimeout(startOnlineMatch, 800);
                 }
-            }).subscribe((status) => {
+            });
+
+            channel.subscribe((status) => {
                 if (status === 'SUBSCRIBED' && !isHost) {
-                    channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'JOIN_REQ' } });
+                    // Гость успешно зашел в комнату и стучится к хосту
+                    setTimeout(() => {
+                        channel.send({
+                            type: 'broadcast',
+                            event: 'game_action',
+                            payload: { type: 'JOIN_REQ' }
+                        });
+                    }, 200);
                 }
             });
         }
