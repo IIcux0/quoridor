@@ -3,9 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <title>Коридор — Онлайн Издание</title>
-    <!-- Гарантированные CDN-ссылки на базы данных Firebase от Google -->
-    <script src="https://cloudflare.com"></script>
-    <script src="https://cloudflare.com"></script>
+    
+    <!-- СОВРЕМЕННОЕ И БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ FIREBASE ДЛЯ SAFARI -->
+    <script type="module">
+        import { initializeApp } from "https://gstatic.com";
+        import { getDatabase, ref, set, onValue, once, remove, child } from "https://gstatic.com";
+        // Делаем модули доступными для всей игры
+        window.FirebaseCore = { initializeApp, getDatabase, ref, set, onValue, once, remove, child };
+    </script>
+    
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
