@@ -129,17 +129,16 @@
             document.getElementById('extended-settings').style.display = mode === 'pvp' ? 'block' : 'none';
             document.getElementById('menu-status').innerText = "";
         }
-
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
-            statusLabel.innerText = "Подключение..."; statusLabel.style.color = "#3498db";
+            statusLabel.innerText = "Подключение к сети..."; statusLabel.style.color = "#3498db";
             state.mode = 'online';
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Подключаемся к стабильному публичному серверу Metered
+            // ИСПОЛЬЗУЕМ СТАБИЛЬНЫЙ ПУБЛИЧНЫЙ СЕРВЕР ИЗ ГЕРМАНИИ (БЕЗ СБОЕВ)
             peer = new Peer({
-                host: '://peerjs.com',
+                host: 'peerjs.com',
                 port: 443,
                 path: '/',
                 secure: true,
@@ -151,6 +150,21 @@
                 }
             });
 
+            if (isHost) {
+                state.myPlayerId = 1;
+                peer.on('open', (id) => {
+                    statusLabel.innerText = `ID для друга: ${id}`; statusLabel.style.color = "#2ecc71";
+                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${id.toUpperCase()}`;
+                    document.getElementById('room-id-display').style.display = 'block';
+                });
+                peer.on('connection', (connection) => {
+                    conn = connection; setupNetworkListeners();
+                    statusLabel.innerText = "Игрок зашел! Старт матча...";
+                    setTimeout(() => {
+                        conn.send({ type: 'START', size: state.size, maxWalls: state.maxWalls });
+                        startOnlineMatch();
+                    }, 1000);
+                });
             } else {
                 state.myPlayerId = 2;
                 const targetId = document.getElementById('room-input').value.trim().toLowerCase();
@@ -159,6 +173,7 @@
                 peer.on('error', () => { statusLabel.innerText = "Ошибка подключения!"; statusLabel.style.color = "#e74c3c"; });
             }
         }
+
         function setupNetworkListeners() {
             conn.on('open', () => {
                 document.getElementById('menu-status').innerText = "Подключено к игре!";
@@ -182,12 +197,30 @@
         }
 
         function startOnlineMatch() {
+            // ИСПРАВЛЕНО: Четко задаем стартовые ячейки в зависимости от размера поля
             state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
-            state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
+            state.currentTurn = 1; 
+            state.wallMode = null; 
+            
+            buildBoard(); 
+            switchScreen('game-screen'); 
+            startTimer();
         }
 
-        function initGame() { state.mode = 'pvp'; state.myPlayerId = 1; state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value); startOnlineMatch(); }
+
+        function initGame() {
+            state.size = parseInt(document.getElementById('cfg-size').value);
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.currentTurn = 1; state.wallMode = null;
+            
+            buildBoard(); 
+            switchScreen('game-screen');
+            startTimer(); // <- ПРЯМОЙ ЗАПУСК ТАЙМЕРА ТЕПЕРЬ ТУТ
+        }
+        
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
             for (let i = 0; i < state.size; i++) { grid += 'auto ' + (i < state.size - 1 ? '12px ' : ''); }
