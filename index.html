@@ -104,12 +104,84 @@
         </div>
     </div>
     <script>
-        let state = { size: 9, maxWalls: 10, currentTurn: 1, p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 }, wallsH: [], wallsV: [], wallMode: null };
+        let state = { 
+            size: 9, maxWalls: 10, currentTurn: 1, 
+            mode: 'pvp', myPlayerId: 1, // Новые сетевые переменные
+            p1: { r: 0, c: 0, walls: 10, moves: 0 }, p2: { r: 0, c: 0, walls: 10, moves: 0 }, 
+            wallsH: [], wallsV: [], wallMode: null 
+        };
         let matchTimer = null; let totalGameTime = 0;
+        let peer = null; let conn = null; // Глобальные переменные для P2P-сети
 
+        // Функция управления видимостью блоков меню
+        function updateMenuSteps() {
+            const mode = document.getElementById('cfg-mode').value;
+            document.getElementById('online-panel').style.display = mode === 'online' ? 'block' : 'none';
+            document.getElementById('extended-settings').style.display = mode === 'pvp' ? 'block' : 'none';
+            document.getElementById('menu-status').innerText = "";
+        }
+
+        // Локальный старт игры (PvP на одном экране)
         function initGame() {
-            state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
-            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 }; state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.mode = 'pvp'; state.myPlayerId = 1;
+            state.size = parseInt(document.getElementById('cfg-size').value);
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            startOnlineMatch();
+        }
+        // Сетевой запуск онлайн-игры
+        function initOnlineGame(isHost) {
+            const statusLabel = document.getElementById('menu-status');
+            statusLabel.innerText = "Подключение к серверам..."; statusLabel.style.color = "#3498db";
+            state.mode = 'online';
+            state.size = parseInt(document.getElementById('cfg-size').value);
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+
+            // Создаем узел на публичных серверах PeerJS
+            peer = new Peer();
+
+            if (isHost) {
+                state.myPlayerId = 1; // Хост играет за Синего
+                peer.on('open', (id) => {
+                    statusLabel.innerText = `ID для друга: ${id}`; statusLabel.style.color = "#2ecc71";
+                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${id.toUpperCase()}`;
+                    document.getElementById('room-id-display').style.display = 'block';
+                });
+                peer.on('connection', (connection) => {
+                    conn = connection; setupNetworkListeners();
+                    statusLabel.innerText = "Игрок зашел! Старт матча...";
+                    setTimeout(() => {
+                        conn.send({ type: 'START', size: state.size, maxWalls: state.maxWalls });
+                        startOnlineMatch();
+                    }, 1000);
+                });
+            } else {
+                state.myPlayerId = 2; // Гость играет за Красного
+                const targetId = document.getElementById('room-input').value.trim().toLowerCase();
+                if (!targetId) { statusLabel.innerText = "Введите ID комнаты!"; statusLabel.style.color = "#e74c3c"; return; }
+                peer.on('open', () => { conn = peer.connect(targetId); setupNetworkListeners(); });
+                peer.on('error', () => { statusLabel.innerText = "Ошибка подключения!"; statusLabel.style.color = "#e74c3c"; });
+            }
+        }
+
+        // Сетевой приемник команд и запуск матча
+        function setupNetworkListeners() {
+            conn.on('open', () => {
+                document.getElementById('menu-status').innerText = "Подключено к игре!";
+                document.getElementById('menu-status').style.color = "#2ecc71";
+            });
+            conn.on('data', (data) => {
+                if (data.type === 'START') {
+                    state.size = data.size; state.maxWalls = data.maxWalls;
+                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${conn.peer.toUpperCase()}`;
+                    document.getElementById('room-id-display').style.display = 'block';
+                    startOnlineMatch();
+                }
+            });
+        }
+
+        function startOnlineMatch() {
+            state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
+            state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
 
