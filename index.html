@@ -2,11 +2,10 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Коридор — Локальное Издание</title>
-        <!-- Подключаем Firebase App и Realtime Database -->
+    <title>Коридор — Полное Онлайн Издание</title>
+    <!-- Жестко подключаем стабильную 8-ю версию Firebase, которая не выдает ошибок в Safari -->
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
-
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; }
@@ -38,20 +37,16 @@
     </style>
 </head>
 <body>
-
     <!-- ГЛАВНОЕ МЕНЮ -->
     <div id="menu-screen" class="screen active">
         <div class="menu-card">
             <h1>Коридор</h1>
             <div class="setting-row"><span>Режим игры:</span>
-                <!-- Добавили переключение режимов и вызов функции настройки меню -->
                 <select id="cfg-mode" onchange="updateMenuSteps()">
                     <option value="pvp" selected>На двоих (один экран)</option>
                     <option value="online">Онлайн игра (по сети)</option>
                 </select>
             </div>
-
-            <!-- Скрытая панель для онлайн-режима -->
             <div id="online-panel" style="display: none; border-top: 2px dashed #bdc3c7; margin-top: 15px; padding-top: 10px;">
                 <button class="btn-main" onclick="initOnlineGame(true)">🏠 Создать новую комнату</button>
                 <div style="margin: 10px 0; font-weight: bold; color: #7f8c8d;">ИЛИ</div>
@@ -60,8 +55,6 @@
                 </div>
                 <button class="btn-main" style="background: #2ecc71;" onclick="initOnlineGame(false)">⚔️ Войти в комнату</button>
             </div>
-
-            <!-- Настройки поля -->
             <div id="extended-settings">
                 <div class="setting-row"><span>Размер поля:</span>
                     <select id="cfg-size">
@@ -73,17 +66,16 @@
                 <div class="setting-row"><span>Количество стен:</span><input type="number" id="cfg-walls" value="10" min="0" max="20"></div>
                 <button id="btn-start-local" class="btn-main" onclick="initGame()">⚔️ Начать матч</button>
             </div>
-            <!-- Сюда будут выводиться системные сообщения и ID комнаты -->
             <div id="menu-status" style="margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; min-height: 20px;"></div>
         </div>
     </div>
+
     <!-- ИГРОВОЙ ЭКРАН -->
     <div id="game-screen" class="screen">
         <div id="game-info">
-            <!-- Строка для вывода ID комнаты во время сетевого матча -->
             <div id="room-id-display" style="font-size: 14px; color: #7f8c8d; margin-bottom: 5px; font-weight: bold; display: none;"></div>
-            <div id="status">Ход Синего (Игрок 1)</div>
-            <div id="w-count">Стены Синего: 10 | Красного: 10</div>
+            <div id="status">Ход ...</div>
+            <div id="w-count">Стены ...</div>
         </div>
         <div id="board"></div>
         <div id="controls">
@@ -92,11 +84,10 @@
             <button id="btn-menu" style="background:#e74c3c; color:white;" onclick="location.reload()">🚪 В меню</button>
         </div>
     </div>
-
     <!-- ОКНО РЕЗУЛЬТАТОВ -->
     <div id="result-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10; align-items: center; justify-content: center;">
         <div class="menu-card" style="max-width: 380px;">
-            <h1 id="md-winner" style="color: #27ae60; margin-bottom: 10px;">Победил: Синий 🎉</h1>
+            <h1 id="md-winner" style="color: #27ae60; margin-bottom: 10px;">Победил!</h1>
             <table style="width: 100%; margin: 15px 0; border-collapse: collapse; text-align: left; font-size: 14px;">
                 <tr style="color: #7f8c8d;"><th style="padding: 6px 0;">Параметр</th><th style="color: #3498db;">Синий</th><th style="color: #e74c3c;">Красный</th></tr>
                 <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px 0; font-weight: bold; color:#555;">Сделано ходов</td><td id="st-m1" style="font-weight: bold;">0</td><td id="st-m2" style="font-weight: bold;">0</td></tr>
@@ -106,9 +97,10 @@
             <button class="btn-main" onclick="location.reload()">🔄 Начать заново</button>
         </div>
     </div>
-<body>
+
+    <!-- НАЧАЛО СКРИПТА И НАСТРОЙКИ БАЗЫ ДАННЫХ GOOGLE -->
     <script>
-               const firebaseConfig = {
+        const firebaseConfig = {
             apiKey: "ВАШ_API_KEY",
             authDomain: "ВАШ_PROJECT_://firebaseapp.com",
             databaseURL: "https://ВАШ_PROJECT_://firebaseio.com",
@@ -135,19 +127,17 @@
             document.getElementById('extended-settings').style.display = mode === 'pvp' ? 'block' : 'none';
             document.getElementById('menu-status').innerText = "";
         }
-
         function initGame() {
             state.mode = 'pvp'; state.myPlayerId = 1;
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
             startOnlineMatch();
         }
+
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
-            statusLabel.innerText = "Подключение..."; statusLabel.style.color = "#3498db";
-            state.mode = 'online';
-            state.size = parseInt(document.getElementById('cfg-size').value);
-            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            statusLabel.innerText = "Подключение к Firebase..."; statusLabel.style.color = "#3498db";
+            state.mode = 'online'; state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
             if (isHost) {
                 state.myPlayerId = 1;
@@ -183,6 +173,7 @@
                 });
             }
         }
+
         function setupFirebaseListeners(isHost) {
             if (isHost) {
                 roomRef.child('players/p2Joined').on('value', (snapshot) => {
@@ -207,7 +198,6 @@
                 }
             });
         }
-
         function startOnlineMatch() {
             state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
@@ -241,6 +231,7 @@
             }
             setTimeout(updateView, 50);
         }
+
         function updateView() {
             document.querySelectorAll('.player').forEach(p => p.remove()); document.querySelectorAll('.cell').forEach(c => c.classList.remove('valid-move'));
             const c1 = document.querySelector(`.cell[data-r="${state.p1.r}"][data-c="${state.p1.c}"]`); if (c1) { const p = document.createElement('div'); p.className = 'player p1'; c1.appendChild(p); }
@@ -278,78 +269,56 @@
             else if (c1 === c2) { const minR = Math.min(r1, r2); if (state.wallsH[minR] && state.wallsH[minR][c1]) return true; if (c1 > 0 && state.wallsH[minR] && state.wallsH[minR][c1 - 1]) return true; }
             return false;
         }
-
         function toggleWallMode(mode) { if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; state.wallMode = state.wallMode === mode ? null : mode; document.getElementById('btn-wall-h').classList.toggle('active', state.wallMode === 'wall-h'); document.getElementById('btn-wall-v').classList.toggle('active', state.wallMode === 'wall-v'); updateView(); }
         function getRealWallCoords(type, r, c) { let realR = r, realC = c; const maxIdx = state.size - 2; if (type === 'h') { if (c > maxIdx || (c === maxIdx && state.wallsH[r][c]) || (c < maxIdx && state.wallsH[r][c+1])) realC = c - 1; } else { if (r > maxIdx || (r === maxIdx && state.wallsV[r][c]) || (r < maxIdx && state.wallsV[r+1] && state.wallsV[r+1][c])) realR = r - 1; } return { r: realR, c: realC }; }
-        function hoverWall(type, r, c, isEnter) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
-            const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
-            if (type === 'h' && (state.wallsH[hr][hc] || (hc > 0 && state.wallsH[hr][hc-1]) || (hc < state.size - 2 && state.wallsH[hr][hc+1]) || state.wallsV[hr][hc])) return;
-            if (type === 'v' && (state.wallsV[hr][hc] || (hr > 0 && state.wallsV[hr-1][hc]) || (hr < state.size - 2 && state.wallsV[hr+1][hc]) || state.wallsH[hr][hc])) return;
-            const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
-            const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
-            const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) el.classList.toggle('wall-hover', isEnter); });
-        }
-        function placeWall(type, r, c) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
-            const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
-            const cur = state.currentTurn === 1 ? state.p1 : state.p2; if (cur.walls <= 0) return;
-            if (type === 'h' && (state.wallsH[hr][hc] || (hc > 0 && state.wallsH[hr][hc-1]) || (hc < state.size - 2 && state.wallsH[hr][hc+1]) || state.wallsV[hr][hc])) return;
-            if (type === 'v' && (state.wallsV[hr][hc] || (hr > 0 && state.wallsV[hr-1][hc]) || (hr < state.size - 2 && state.wallsV[hr+1][hc]) || state.wallsH[hr][hc])) return;
-
-            if (type === 'h') { state.wallsH[hr][hc] = 1; } else { state.wallsV[hr][hc] = 1; }
-            if (!hasPath(state.p1.r, state.p1.c, 0) || !hasPath(state.p2.r, state.p2.c, state.size - 1)) {
-                if (type === 'h') { state.wallsH[hr][hc] = 0; } else { state.wallsV[hr][hc] = 0; }
-                alert("Нельзя полностью перекрывать проход к финишу!"); return;
-            }
-            renderNetworkWall(type, hr, hc, state.currentTurn);
-            if (state.mode === 'online' && roomRef) { roomRef.child('gameState').set({ currentTurn: state.currentTurn === 1 ? 2 : 1, lastAction: "WALL", playerWhoMoved: state.myPlayerId, wallData: { type: type, r: hr, c: hc } }); }
-            cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
-        }
-
-        function renderNetworkWall(type, r, c, turn) {
-            const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
-            const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
-            const inter = document.getElementById(`x-${r}-${c}`); [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
-        }
-
-        function hasPath(startR, startC, targetRow) {
-            let visited = Array(state.size).fill().map(() => Array(state.size).fill(false)); let queue = [{r: startR, c: startC}]; visited[startR][startC] = true;
-            while (queue.length > 0) {
-                let curr = queue.shift(); if (curr.r === targetRow) return true; const dirs = [{dr: -1, dc: 0}, {dr: 1, dc: 0}, {dr: 0, dc: -1}, {dr: 0, dc: 1}];
-                for (let d of dirs) {
-                    let nr = curr.r + d.dr, nc = curr.c + d.dc;
-                    if (nr >= 0 && nr < state.size && nc >= 0 && nc < state.size) {
-                        if (!visited[nr][nc] && !isWallBetween(curr.r, curr.c, nr, nc)) { visited[nr][nc] = true; queue.push({r: nr, c: nc}); }
-                    }
-                }
-            }
-            return false;
-        }
-
         function handleCellClick(r, c) {
-            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if (state.wallMode) return;
-            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
-            const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
-            if (state.mode === 'online' && roomRef) { roomRef.child('gameState').set({ currentTurn: state.currentTurn === 1 ? 2 : 1, lastAction: "MOVE", playerWhoMoved: state.myPlayerId, moveCoords: { r: r, c: c } }); }
+            if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return;
+            if (state.wallMode) return;
+            const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+            if (!cell || !cell.classList.contains('valid-move')) return;
+            const cur = state.currentTurn === 1 ? state.p1 : state.p2;
+            cur.r = r; cur.c = c; cur.moves++;
+            if (state.mode === 'online' && roomRef) {
+                roomRef.child('gameState').set({
+                    currentTurn: state.currentTurn === 1 ? 2 : 1,
+                    lastAction: "MOVE",
+                    playerWhoMoved: state.myPlayerId,
+                    moveCoords: { r: r, c: c }
+                });
+            }
             checkWinOrSwitch();
         }
 
         function checkWinOrSwitch() {
-            if (state.p1.r === 0) { finishGame(1); return; } if (state.p2.r === state.size - 1) { finishGame(2); return; }
-            state.currentTurn = state.currentTurn === 1 ? 2 : 1; updateView();
+            if (state.p1.r === 0) { finishGame(1); return; }
+            if (state.p2.r === state.size - 1) { finishGame(2); return; }
+            state.currentTurn = state.currentTurn === 1 ? 2 : 1;
+            updateView();
         }
 
-        function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
+        function startTimer() {
+            totalGameTime = 0;
+            clearInterval(matchTimer);
+            matchTimer = setInterval(() => { totalGameTime++; }, 1000);
+        }
 
         function finishGame(winner) {
-            clearInterval(matchTimer); if (state.mode === 'online' && roomRef) roomRef.remove();
-            document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆'; document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
-            document.getElementById('st-m1').innerText = state.p1.moves; document.getElementById('st-m2').innerText = state.p2.moves;
-            document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls; document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
-            document.getElementById('st-total-time').innerText = totalGameTime + 'с'; document.getElementById('result-modal').style.display = 'flex';
+            clearInterval(matchTimer);
+            if (state.mode === 'online' && roomRef) roomRef.remove();
+            document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆';
+            document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
+            document.getElementById('st-m1').innerText = state.p1.moves;
+            document.getElementById('st-m2').innerText = state.p2.moves;
+            document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls;
+            document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
+            document.getElementById('st-total-time').innerText = totalGameTime + 'с';
+            document.getElementById('result-modal').style.display = 'flex';
         }
-        function switchScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+        function switchScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
     </script>
 </body>
 </html>
