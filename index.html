@@ -126,65 +126,49 @@
 
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
-            statusLabel.innerText = "Подключение к Firebase..."; statusLabel.style.color = "#3498db";
-            state.mode = 'online'; state.size = parseInt(document.getElementById('cfg-size').value); state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
+            statusLabel.innerText = "Подключение к сети..."; statusLabel.style.color = "#3498db";
+            state.mode = 'online';
+            state.size = parseInt(document.getElementById('cfg-size').value);
+            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
             if (isHost) {
                 state.myPlayerId = 1;
-                const roomId = Math.random().toString(36).substr(2, 5).toUpperCase();
-                roomRef = database.ref('rooms/' + roomId);
-                roomRef.set({
-                    settings: { size: state.size, maxWalls: state.maxWalls },
-                    gameState: { currentTurn: 1, lastAction: "CREATE" },
-                    players: { p1Joined: true, p2Joined: false }
-                }).then(() => {
-                    statusLabel.innerText = `ID для друга: ${roomId}`; statusLabel.style.color = "#2ecc71";
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                    setupFirebaseListeners(true);
-                });
+                currentRoomId = Math.random().toString(36).substr(2, 5).toUpperCase();
+                statusLabel.innerText = `ID для друга: ${currentRoomId}`; statusLabel.style.color = "#2ecc71";
+                document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${currentRoomId}`;
+                document.getElementById('room-id-display').style.display = 'block';
+                setupSupabaseChannel(currentRoomId, true);
             } else {
                 state.myPlayerId = 2;
                 const roomId = document.getElementById('room-input').value.trim().toUpperCase();
                 if (!roomId) { statusLabel.innerText = "Введите ID!"; statusLabel.style.color = "#e74c3c"; return; }
-                roomRef = database.ref('rooms/' + roomId);
-                roomRef.once('value', (snapshot) => {
-                    if (!snapshot.exists()) {
-                        statusLabel.innerText = "Комната не найдена!"; statusLabel.style.color = "#e74c3c";
-                    } else {
-                        roomRef.child('players/p2Joined').set(true);
-                        statusLabel.innerText = "Подключено!"; statusLabel.style.color = "#2ecc71";
-                        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-                        document.getElementById('room-id-display').style.display = 'block';
-                        const data = snapshot.val();
-                        state.size = data.settings.size; state.maxWalls = data.settings.maxWalls;
-                        setupFirebaseListeners(false); startOnlineMatch();
-                    }
-                });
+                currentRoomId = roomId;
+                document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+                document.getElementById('room-id-display').style.display = 'block';
+                setupSupabaseChannel(roomId, false);
             }
         }
 
-        function setupFirebaseListeners(isHost) {
-            if (isHost) {
-                roomRef.child('players/p2Joined').on('value', (snapshot) => {
-                    if (snapshot.val() === true) {
-                        document.getElementById('menu-status').innerText = "Игрок подключился!";
-                        roomRef.child('players/p2Joined').off(); setTimeout(startOnlineMatch, 1000);
-                    }
-                });
-            }
-            roomRef.child('gameState').on('value', (snapshot) => {
-                const data = snapshot.val(); if (!data || data.lastAction === "CREATE") return;
-                if (data.playerWhoMoved !== state.myPlayerId) {
-                    if (data.lastAction === "MOVE") {
-                        const opp = data.playerWhoMoved === 1 ? state.p1 : state.p2;
-                        opp.r = data.moveCoords.r; opp.c = data.moveCoords.c; opp.moves++; checkWinOrSwitch();
-                    } else if (data.lastAction === "WALL") {
-                        const wData = data.wallData;
-                        if (wData.type === 'h') { state.wallsH[wData.r][wData.c] = 1; } else { state.wallsV[wData.r][wData.c] = 1; }
-                        renderNetworkWall(wData.type, wData.r, wData.c, data.playerWhoMoved);
-                        const opp = data.playerWhoMoved === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
-                    }
+        function setupSupabaseChannel(roomId, isHost) {
+            channel = supabase.channel('room_' + roomId, { config: { broadcast: { self: false } } });
+            channel.on('broadcast', { event: 'game_action' }, (payload) => {
+                const data = payload.payload;
+                if (data.type === 'START' && !isHost) {
+                    state.size = data.size; state.maxWalls = data.maxWalls; startOnlineMatch();
+                } else if (data.type === 'MOVE') {
+                    const opp = state.currentTurn === 1 ? state.p1 : state.p2;
+                    opp.r = data.r; opp.c = data.c; opp.moves++; checkWinOrSwitch();
+                } else if (data.type === 'WALL') {
+                    if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
+                    renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
+                    const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+                } else if (data.type === 'JOIN_REQ' && isHost) {
+                    channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'START', size: state.size, maxWalls: state.maxWalls } });
+                    document.getElementById('menu-status').innerText = "Игрок подключился!"; setTimeout(startOnlineMatch, 1000);
+                }
+            }).subscribe((status) => {
+                if (status === 'SUBSCRIBED' && !isHost) {
+                    channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'JOIN_REQ' } });
                 }
             });
         }
@@ -194,6 +178,7 @@
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
+
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
             for (let i = 0; i < state.size; i++) { grid += 'auto ' + (i < state.size - 1 ? '12px ' : ''); }
@@ -272,7 +257,7 @@
             const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
             const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) el.classList.toggle('wall-hover', isEnter); });
         }
-         function placeWall(type, r, c) {
+                 function placeWall(type, r, c) {
             if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; if (cur.walls <= 0) return;
@@ -286,9 +271,8 @@
             }
             renderNetworkWall(type, hr, hc, state.currentTurn);
             
-            // ИСПРАВЛЕНО: Защита от зависания. Отправляем данные в Firebase только если база действительно активна
-            if (state.mode === 'online' && typeof database !== 'undefined' && roomRef) {
-                roomRef.child('gameState').set({ currentTurn: state.currentTurn === 1 ? 2 : 1, lastAction: "WALL", playerWhoMoved: state.myPlayerId, wallData: { type: type, r: hr, c: hc } });
+            if (state.mode === 'online' && channel) {
+                channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'WALL', wallType: type, r: hr, c: hc } });
             }
             cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
         }
@@ -318,9 +302,8 @@
             const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
             
-            // ИСПРАВЛЕНО: Защита от зависания. Отправляем координаты шага только если комната в Firebase существует
-            if (state.mode === 'online' && typeof database !== 'undefined' && roomRef) {
-                roomRef.child('gameState').set({ currentTurn: state.currentTurn === 1 ? 2 : 1, lastAction: "MOVE", playerWhoMoved: state.myPlayerId, moveCoords: { r: r, c: c } });
+            if (state.mode === 'online' && channel) {
+                channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'MOVE', r: r, c: c } });
             }
             checkWinOrSwitch();
         }
@@ -333,7 +316,7 @@
         function startTimer() { totalGameTime = 0; clearInterval(matchTimer); matchTimer = setInterval(() => { totalGameTime++; }, 1000); }
 
         function finishGame(winner) {
-            clearInterval(matchTimer); if (state.mode === 'online' && typeof database !== 'undefined' && roomRef) roomRef.remove();
+            clearInterval(matchTimer); if (state.mode === 'online' && channel) channel.unsubscribe();
             document.getElementById('md-winner').innerText = winner === 1 ? 'Победил Синий 🎉' : 'Победил Красный 🏆'; document.getElementById('md-winner').style.color = winner === 1 ? '#3498db' : '#e74c3c';
             document.getElementById('st-m1').innerText = state.p1.moves; document.getElementById('st-m2').innerText = state.p2.moves;
             document.getElementById('st-w1').innerText = state.maxWalls - state.p1.walls; document.getElementById('st-w2').innerText = state.maxWalls - state.p2.walls;
@@ -343,4 +326,3 @@
     </script>
 </body>
 </html>
-
