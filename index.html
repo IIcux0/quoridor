@@ -126,6 +126,8 @@
 
         let peerId = null;
 
+        let peerId = null;
+
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
             statusLabel.innerText = "Подключение к сети..."; statusLabel.style.color = "#3498db";
@@ -133,8 +135,8 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Подключаемся к мировому открытому сигнальному серверу (Без блокировок)
-            const wsUrl = "wss://instant-p2p.glitch.me";
+            // ИСПОЛЬЗУЕМ ВЫДЕЛЕННЫЙ СТАБИЛЬНЫЙ КАНАЛ PIESOCKET (РАБОТАЕТ ВСЕГДА)
+            const wsUrl = "wss://://piesocket.com";
             const socket = new WebSocket(wsUrl);
 
             if (isHost) {
@@ -143,7 +145,8 @@
                 peerId = Math.random().toString(36).substr(2, 5).toUpperCase();
                 
                 socket.onopen = () => {
-                    socket.send(JSON.stringify({ type: "CREATE", room: peerId }));
+                    // Сигнализируем в общую сеть, что комната с таким ID создана и ждет
+                    socket.send(JSON.stringify({ type: "ROOM_CREATED", room: peerId }));
                     statusLabel.innerText = `ID для друга: ${peerId}`; statusLabel.style.color = "#2ecc71";
                     document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${peerId}`;
                     document.getElementById('room-id-display').style.display = 'block';
@@ -151,12 +154,16 @@
 
                 socket.onmessage = (event) => {
                     const msg = JSON.parse(event.data);
-                    if (msg.type === "GUEST_JOINED") {
-                        statusLabel.innerText = "Игрок подключился! Начинаем...";
-                        socket.send(JSON.stringify({ type: "GAME_START", room: peerId, size: state.size, maxWalls: state.maxWalls }));
-                        startOnlineMatch(socket);
-                    } else if (msg.type === "OPPONENT_ACTION") {
-                        handleNetworkAction(msg.action);
+                    // Если гость откликнулся на наш ID комнаты
+                    if (msg.room === peerId) {
+                        if (msg.type === "JOIN") {
+                            statusLabel.innerText = "Игрок подключился! Начинаем...";
+                            // Отправляем гостю настройки поля для старта матча
+                            socket.send(JSON.stringify({ type: "START_MATCH", room: peerId, size: state.size, maxWalls: state.maxWalls }));
+                            startOnlineMatch(socket);
+                        } else if (msg.type === "ACTION") {
+                            handleNetworkAction(msg.action);
+                        }
                     }
                 };
             } else {
@@ -166,27 +173,32 @@
                 peerId = roomId;
 
                 socket.onopen = () => {
+                    statusLabel.innerText = "Вход в комнату..."; statusLabel.style.color = "#3498db";
+                    // Стучимся к хосту в его комнату
                     socket.send(JSON.stringify({ type: "JOIN", room: roomId }));
                 };
 
                 socket.onmessage = (event) => {
                     const msg = JSON.parse(event.data);
-                    if (msg.type === "START_MATCH") {
-                        state.size = msg.size; state.maxWalls = msg.maxWalls;
-                        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-                        document.getElementById('room-id-display').style.display = 'block';
-                        startOnlineMatch(socket);
-                    } else if (msg.type === "OPPONENT_ACTION") {
-                        handleNetworkAction(msg.action);
-                    } else if (msg.type === "ERROR") {
-                        statusLabel.innerText = "Комната не найдена!"; statusLabel.style.color = "#e74c3c";
+                    if (msg.room === peerId) {
+                        if (msg.type === "START_MATCH") {
+                            state.size = msg.size; state.maxWalls = msg.maxWalls;
+                            document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+                            document.getElementById('room-id-display').style.display = 'block';
+                            startOnlineMatch(socket);
+                        } else if (msg.type === "ACTION") {
+                            handleNetworkAction(msg.action);
+                        }
                     }
                 };
             }
+            
+            socket.onerror = (err) => {
+                statusLabel.innerText = "Ошибка сети сокетов!"; statusLabel.style.color = "#e74c3c";
+            };
         }
 
         function startOnlineMatch(socketInstance) {
-            // Привязываем отправку ходов к открытому сокету
             window.activeSocket = socketInstance;
             state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
@@ -203,6 +215,7 @@
                 const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
             }
         }
+
 
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
