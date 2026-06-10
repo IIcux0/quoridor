@@ -124,13 +124,7 @@
             document.getElementById('menu-status').innerText = "";
         }
 
-        function initGame() {
-            state.mode = 'pvp'; state.myPlayerId = 1;
-            state.size = parseInt(document.getElementById('cfg-size').value);
-            state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
-            startOnlineMatch();
-        }
-
+        let peerId = null;
 
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
@@ -139,76 +133,75 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
+            // Подключаемся к мировому открытому сигнальному серверу (Без блокировок)
+            const wsUrl = "wss://instant-p2p.glitch.me";
+            const socket = new WebSocket(wsUrl);
+
             if (isHost) {
                 state.myPlayerId = 1;
-                currentRoomId = Math.random().toString(36).substr(2, 5).toUpperCase();
-                statusLabel.innerText = `ID для друга: ${currentRoomId}`; statusLabel.style.color = "#2ecc71";
-                document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${currentRoomId}`;
-                document.getElementById('room-id-display').style.display = 'block';
-                setupSupabaseChannel(currentRoomId, true);
+                // Генерируем случайную комнату
+                peerId = Math.random().toString(36).substr(2, 5).toUpperCase();
+                
+                socket.onopen = () => {
+                    socket.send(JSON.stringify({ type: "CREATE", room: peerId }));
+                    statusLabel.innerText = `ID для друга: ${peerId}`; statusLabel.style.color = "#2ecc71";
+                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${peerId}`;
+                    document.getElementById('room-id-display').style.display = 'block';
+                };
+
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === "GUEST_JOINED") {
+                        statusLabel.innerText = "Игрок подключился! Начинаем...";
+                        socket.send(JSON.stringify({ type: "GAME_START", room: peerId, size: state.size, maxWalls: state.maxWalls }));
+                        startOnlineMatch(socket);
+                    } else if (msg.type === "OPPONENT_ACTION") {
+                        handleNetworkAction(msg.action);
+                    }
+                };
             } else {
                 state.myPlayerId = 2;
                 const roomId = document.getElementById('room-input').value.trim().toUpperCase();
                 if (!roomId) { statusLabel.innerText = "Введите ID!"; statusLabel.style.color = "#e74c3c"; return; }
-                currentRoomId = roomId;
-                document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
-                document.getElementById('room-id-display').style.display = 'block';
-                setupSupabaseChannel(roomId, false);
+                peerId = roomId;
+
+                socket.onopen = () => {
+                    socket.send(JSON.stringify({ type: "JOIN", room: roomId }));
+                };
+
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === "START_MATCH") {
+                        state.size = msg.size; state.maxWalls = msg.maxWalls;
+                        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+                        document.getElementById('room-id-display').style.display = 'block';
+                        startOnlineMatch(socket);
+                    } else if (msg.type === "OPPONENT_ACTION") {
+                        handleNetworkAction(msg.action);
+                    } else if (msg.type === "ERROR") {
+                        statusLabel.innerText = "Комната не найдена!"; statusLabel.style.color = "#e74c3c";
+                    }
+                };
             }
         }
 
-        function setupSupabaseChannel(roomId, isHost) {
-            channel = supabase.channel('room_' + roomId, { config: { broadcast: { self: false } } });
-            
-            channel.on('broadcast', { event: 'game_action' }, (response) => {
-                // Защита: считываем данные независимо от того, как их упаковал сервер Supabase
-                const data = response.payload || response;
-                if (!data) return;
-
-                if (data.type === 'START' && !isHost) {
-                    state.size = data.size; 
-                    state.maxWalls = data.maxWalls; 
-                    startOnlineMatch();
-                } else if (data.type === 'MOVE') {
-                    const opp = state.currentTurn === 1 ? state.p1 : state.p2;
-                    opp.r = data.r; opp.c = data.c; opp.moves++; 
-                    checkWinOrSwitch();
-                } else if (data.type === 'WALL') {
-                    if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
-                    renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
-                    const opp = state.currentTurn === 1 ? state.p1 : state.p2; 
-                    opp.walls--; 
-                    checkWinOrSwitch();
-                } else if (data.type === 'JOIN_REQ' && isHost) {
-                    // Хост услышал гостя и мгновенно высылает ему настройки карты для старта
-                    channel.send({
-                        type: 'broadcast',
-                        event: 'game_action',
-                        payload: { type: 'START', size: state.size, maxWalls: state.maxWalls }
-                    });
-                    document.getElementById('menu-status').innerText = "Игрок подключился! Старт...";
-                    document.getElementById('menu-status').style.color = "#2ecc71";
-                    setTimeout(startOnlineMatch, 800);
-                }
-            });
-
-            channel.subscribe((status) => {
-                if (status === 'SUBSCRIBED' && !isHost) {
-                    setTimeout(() => {
-                        channel.send({
-                            type: 'broadcast',
-                            event: 'game_action',
-                            payload: { type: 'JOIN_REQ' }
-                        });
-                    }, 150); // Стабильная задержка для синхронизации сети
-                }
-            });
-        }
-
-        function startOnlineMatch() {
+        function startOnlineMatch(socketInstance) {
+            // Привязываем отправку ходов к открытому сокету
+            window.activeSocket = socketInstance;
             state.p1 = { r: state.size - 1, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
+        }
+
+        function handleNetworkAction(data) {
+            if (data.type === 'MOVE') {
+                const opp = state.currentTurn === 1 ? state.p1 : state.p2;
+                opp.r = data.r; opp.c = data.c; opp.moves++; checkWinOrSwitch();
+            } else if (data.type === 'WALL') {
+                if (data.wallType === 'h') { state.wallsH[data.r][data.c] = 1; } else { state.wallsV[data.r][data.c] = 1; }
+                renderNetworkWall(data.wallType, data.r, data.c, state.currentTurn);
+                const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
+            }
         }
 
         function buildBoard() {
@@ -303,12 +296,12 @@
             }
             renderNetworkWall(type, hr, hc, state.currentTurn);
             
-            if (state.mode === 'online' && channel) {
-                channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'WALL', wallType: type, r: hr, c: hc } });
+            // ИСПРАВЛЕНО: Мгновенная отправка стены через новый независимый сетевой канал
+            if (state.mode === 'online' && window.activeSocket) {
+                window.activeSocket.send(JSON.stringify({ type: "ACTION", room: peerId, action: { type: 'WALL', wallType: type, r: hr, c: hc } }));
             }
             cur.walls--; toggleWallMode(state.wallMode); checkWinOrSwitch();
         }
-
         function renderNetworkWall(type, r, c, turn) {
             const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
             const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
@@ -334,8 +327,9 @@
             const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); if (!cell || !cell.classList.contains('valid-move')) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; cur.r = r; cur.c = c; cur.moves++;
             
-            if (state.mode === 'online' && channel) {
-                channel.send({ type: 'broadcast', event: 'game_action', payload: { type: 'MOVE', r: r, c: c } });
+            // ИСПРАВЛЕНО: Мгновенная отправка шага фишки через новый независимый сетевой канал
+            if (state.mode === 'online' && window.activeSocket) {
+                window.activeSocket.send(JSON.stringify({ type: "ACTION", room: peerId, action: { type: 'MOVE', r: r, c: c } }));
             }
             checkWinOrSwitch();
         }
