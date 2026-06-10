@@ -93,14 +93,22 @@
         let currentRoomId = null;
         let channel = null;
 
-        // Инициализация клиента Supabase
+        // ИСПРАВЛЕНО: Принудительно включаем Realtime-модуль без авторизации таблиц
         try {
             if (typeof supabase !== 'undefined') {
-                supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth: { persistSession: false },
+                    realtime: {
+                        params: {
+                            eventsPerSecond: 10
+                        }
+                    }
+                });
             }
         } catch (e) {
             console.log("Supabase заблокирован локально, включен автономный режим.");
         }
+
 
         let state = {
             size: 9, maxWalls: 10, currentTurn: 1, mode: 'pvp', myPlayerId: 1,
@@ -186,14 +194,13 @@
 
             channel.subscribe((status) => {
                 if (status === 'SUBSCRIBED' && !isHost) {
-                    // Гость успешно зашел в комнату и стучится к хосту
                     setTimeout(() => {
                         channel.send({
                             type: 'broadcast',
                             event: 'game_action',
                             payload: { type: 'JOIN_REQ' }
                         });
-                    }, 200);
+                    }, 150); // Стабильная задержка для синхронизации сети
                 }
             });
         }
@@ -282,7 +289,7 @@
             const w1 = document.querySelector(`${sel}[data-r="${hr}"][data-c="${hc}"]`); const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? hr : hr+1}"][data-c="${type==='h' ? hc+1 : hc}"]`);
             const inter = document.getElementById(`x-${hr}-${hc}`); [w1, w2, inter].forEach(el => { if (el) el.classList.toggle('wall-hover', isEnter); });
         }
-                 function placeWall(type, r, c) {
+        function placeWall(type, r, c) {
             if (state.mode === 'online' && state.currentTurn !== state.myPlayerId) return; if ((type === 'h' && state.wallMode !== 'wall-h') || (type === 'v' && state.wallMode !== 'wall-v')) return;
             const coords = getRealWallCoords(type, r, c); const hr = coords.r, hc = coords.c; if (hc < 0 || hr < 0 || hc >= state.size - 1 || hr >= state.size - 1) return;
             const cur = state.currentTurn === 1 ? state.p1 : state.p2; if (cur.walls <= 0) return;
