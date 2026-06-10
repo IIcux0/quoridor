@@ -99,23 +99,22 @@
         </div>
     </div>
     <script>
-        // Конфигурация вашего нового европейского проекта Google Firebase
+        // Конфигурация проекта Google Firebase (США - us-central1)
         const firebaseConfig = {
-            apiKey: "AIzaSyDWrtYoxlnJI6MKDG1WRHuBsCL2Nvt7dbk",
-            authDomain: "://firebaseapp.com",
-            databaseURL: "https://quoridor-34063-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "quoridor-34063",
-            storageBucket: "quoridor-34063.firebasestorage.app",
-            messagingSenderId: "540576137005",
-            appId: "1:540576137005:web:b53517eab70e5c0b6f5da4",
-            measurementId: "G-P9WNT5DGXM"
+            apiKey: "AIzaSyCoGUBldo9MlMEylcJSAL7xQVFf9bsB3XA",
+            authDomain: "quoridor-us.firebaseapp.com",
+            databaseURL: "https://firebaseio.com",
+            projectId: "quoridor-us",
+            storageBucket: "quoridor-us.firebasestorage.app",
+            messagingSenderId: "13462363537",
+            appId: "1:13462363537:web:7b7459bd55eb79201bce30",
+            measurementId: "G-2H6480RZFZ"
         };
-
 
         let database = null;
         let roomRef = null;
         
-        // Безопасная проверка инициализации базы данных
+        // Безопасный запуск и инициализация базы данных Google
         try {
             if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
