@@ -147,44 +147,95 @@
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
             startOnlineMatch();
         }
-        // Сетевой запуск онлайн-игры
+                // Сетевой запуск онлайн-игры через Firebase
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
-            statusLabel.innerText = "Подключение к серверам..."; statusLabel.style.color = "#3498db";
+            statusLabel.innerText = "Подключение к Firebase..."; statusLabel.style.color = "#3498db";
             state.mode = 'online';
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            peer = new Peer({
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:://google.com' },
-                        { urls: 'stun:://google.com' },
-                        { urls: 'stun:stun.metered.ca:443' }
-                    ]
-                }
-            });
+            if (isHost) {
+                state.myPlayerId = 1; // Создатель — Синий
+                // Генерируем случайный ID комнаты из 5 букв
+                const roomId = Math.random().toString(36).substr(2, 5).toUpperCase();
+                roomRef = database.ref('rooms/' + roomId);
+
+                // Записываем начальные настройки матча в базу данных Google
+                roomRef.set({
+                    settings: { size: state.size, maxWalls: state.maxWalls },
+                    gameState: { currentTurn: 1, lastAction: "CREATE" },
+                    players: { p1Joined: true, p2Joined: false }
+                }).then(() => {
+                    statusLabel.innerText = `ID для друга: ${roomId}`; statusLabel.style.color = "#2ecc71";
+                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+                    document.getElementById('room-id-display').style.display = 'block';
+                    
+                    // Включаем «прослушку» базы: ждем, когда зайдет второй игрок
+                    setupFirebaseListeners(true);
+                });
             } else {
-                state.myPlayerId = 2; // Гость играет за Красного
-                const targetId = document.getElementById('room-input').value.trim().toLowerCase();
-                if (!targetId) { statusLabel.innerText = "Введите ID комнаты!"; statusLabel.style.color = "#e74c3c"; return; }
-                peer.on('open', () => { conn = peer.connect(targetId); setupNetworkListeners(); });
-                peer.on('error', () => { statusLabel.innerText = "Ошибка подключения!"; statusLabel.style.color = "#e74c3c"; });
+                state.myPlayerId = 2; // Вошедший — Красный
+                const roomId = document.getElementById('room-input').value.trim().toUpperCase();
+                if (!roomId) { statusLabel.innerText = "Введите ID комнаты!"; statusLabel.style.color = "#e74c3c"; return; }
+                
+                roomRef = database.ref('rooms/' + roomId);
+                
+                // Проверяем, существует ли такая комната
+                roomRef.once('value', (snapshot) => {
+                    if (!snapshot.exists()) {
+                        statusLabel.innerText = "Комната не найдена!"; statusLabel.style.color = "#e74c3c";
+                    } else {
+                        // Отмечаем в Firebase, что второй игрок зашел
+                        roomRef.child('players/p2Joined').set(true);
+                        statusLabel.innerText = "Подключение успешно! Загрузка..."; statusLabel.style.color = "#2ecc71";
+                        document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${roomId}`;
+                        document.getElementById('room-id-display').style.display = 'block';
+                        
+                        // Забираем настройки поля, которые выставил Хост
+                        const data = snapshot.val();
+                        state.size = data.settings.size;
+                        state.maxWalls = data.settings.maxWalls;
+                        
+                        setupFirebaseListeners(false);
+                        startOnlineMatch();
+                    }
+                });
             }
         }
 
-        // Сетевой приемник команд и запуск матча
-        function setupNetworkListeners() {
-            conn.on('open', () => {
-                document.getElementById('menu-status').innerText = "Подключено к игре!";
-                document.getElementById('menu-status').style.color = "#2ecc71";
-            });
-            conn.on('data', (data) => {
-                if (data.type === 'START') {
-                    state.size = data.size; state.maxWalls = data.maxWalls;
-                    document.getElementById('room-id-display').innerText = `ID КОМНАТЫ: ${conn.peer.toUpperCase()}`;
-                    document.getElementById('room-id-display').style.display = 'block';
-                    startOnlineMatch();
+        // Функция ежесекундного отслеживания изменений в базе данных
+        function setupFirebaseListeners(isHost) {
+            // Если мы Хост — ждем подключения Гостя
+            if (isHost) {
+                roomRef.child('players/p2Joined').on('value', (snapshot) => {
+                    if (snapshot.val() === true) {
+                        document.getElementById('menu-status').innerText = "Игрок подключился! Начинаем матч...";
+                        // Отключаем слежку за входом, чтобы не дублировать старт
+                        roomRef.child('players/p2Joined').off(); 
+                        setTimeout(startOnlineMatch, 1000);
+                    }
+                });
+            }
+
+            // Слушаем любые ходы фишек и стен, которые записываются в Firebase
+            roomRef.child('gameState').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data || data.lastAction === "CREATE") return;
+
+                // Если это чужой ход — переносим его на наш экран
+                if (data.playerWhoMoved !== state.myPlayerId) {
+                    if (data.lastAction === "MOVE") {
+                        const opp = data.playerWhoMoved === 1 ? state.p1 : state.p2;
+                        opp.r = data.moveCoords.r; opp.c = data.moveCoords.c; opp.moves++;
+                        checkWinOrSwitch();
+                    } else if (data.lastAction === "WALL") {
+                        const wData = data.wallData;
+                        if (wData.type === 'h') { state.wallsH[wData.r][wData.c] = 1; } else { state.wallsV[wData.r][wData.c] = 1; }
+                        renderNetworkWall(wData.type, wData.r, wData.c, data.playerWhoMoved);
+                        const opp = data.playerWhoMoved === 1 ? state.p1 : state.p2;
+                        opp.walls--; checkWinOrSwitch();
+                    }
                 }
             });
         }
@@ -194,6 +245,16 @@
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
+
+        // Вспомогательная функция отрисовки чужой стены, прилетевшей из сети
+        function renderNetworkWall(type, r, c, turn) {
+            const cls = turn === 1 ? 'wall-p1' : 'wall-p2'; const sel = type === 'h' ? '.wall-space-h' : '.wall-space-v';
+            const w1 = document.querySelector(`${sel}[data-r="${r}"][data-c="${c}"]`); 
+            const w2 = document.querySelector(`${sel}[data-r="${type==='h' ? r : r+1}"][data-c="${type==='h' ? c+1 : c}"]`);
+            const inter = document.getElementById(`x-${r}-${c}`);
+            [w1, w2, inter].forEach(el => { if (el) { el.classList.add('wall-active', cls); el.classList.remove('wall-hover'); } });
+        }
+
 
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
