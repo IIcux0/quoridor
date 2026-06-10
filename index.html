@@ -114,7 +114,6 @@
             state.size = parseInt(document.getElementById('cfg-size').value);
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
 
-            // Подключаемся к стабильному публичному эхо-серверу веб-сокетов PieSocket
             activeSocket = new WebSocket("wss://://piesocket.com");
 
             if (isHost) {
@@ -149,11 +148,12 @@
                     } else if (msg.type === "START" && !isHost) {
                         state.size = msg.size; state.maxWalls = msg.maxWalls;
                         startOnlineMatch();
-                    } else if (msg.sender !== state.myPlayerId) { // Считываем ходы ТОЛЬКО от соперника
+                    } else if (msg.sender !== state.myPlayerId) {
                         if (msg.type === "MOVE") {
                             const opp = state.currentTurn === 1 ? state.p1 : state.p2;
                             opp.r = msg.r; opp.c = msg.c; opp.moves++; checkWinOrSwitch();
                         } else if (msg.type === "WALL") {
+                            // ИСПРАВЛЕНО: Считываем данные строго из переменной msg, а не из data
                             if (msg.wallType === 'h') { state.wallsH[msg.r][msg.c] = 1; } else { state.wallsV[msg.r][msg.c] = 1; }
                             renderNetworkWall(msg.wallType, msg.r, msg.c, state.currentTurn);
                             const opp = state.currentTurn === 1 ? state.p1 : state.p2; opp.walls--; checkWinOrSwitch();
@@ -168,6 +168,7 @@
             state.p2 = { r: 0, c: Math.floor(state.size / 2), walls: state.maxWalls, moves: 0 };
             state.currentTurn = 1; state.wallMode = null; buildBoard(); switchScreen('game-screen'); startTimer();
         }
+
         function buildBoard() {
             const board = document.getElementById('board'); board.innerHTML = ''; let grid = '';
             for (let i = 0; i < state.size; i++) { grid += 'auto ' + (i < state.size - 1 ? '12px ' : ''); }
