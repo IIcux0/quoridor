@@ -95,8 +95,8 @@
 
         // Инициализация клиента Supabase
         try {
-            if (typeof supabasejs !== 'undefined') {
-                supabase = supabasejs.createClient(SUPABASE_URL, SUPABASE_KEY);
+            if (typeof supabase !== 'undefined') {
+                supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             }
         } catch (e) {
             console.log("Supabase заблокирован локально, включен автономный режим.");
