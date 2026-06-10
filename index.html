@@ -4,13 +4,8 @@
     <meta charset="UTF-8">
     <title>Коридор — Онлайн Издание</title>
     
-    <!-- СОВРЕМЕННОЕ И БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ FIREBASE ДЛЯ SAFARI -->
-    <script type="module">
-        import { initializeApp } from "https://gstatic.com";
-        import { getDatabase, ref, set, onValue, once, remove, child } from "https://gstatic.com";
-        // Делаем модули доступными для всей игры
-        window.FirebaseCore = { initializeApp, getDatabase, ref, set, onValue, once, remove, child };
-    </script>
+    <!-- Подключаем стабильную и неблокируемую библиотеку Supabase -->
+    <script src="https://jsdelivr.net"></script>
     
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f0f0f0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
@@ -42,6 +37,7 @@
         .btn-main { background: #3498db; color: white; width: 100%; margin-top: 10px; padding: 12px; font-size: 16px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(52,152,219,0.3); }
     </style>
 </head>
+
 <body>
 
     <!-- ГЛАВНОЕ МЕНЮ -->
@@ -105,29 +101,21 @@
         </div>
     </div>
     <script>
-        // Конфигурация проекта Google Firebase (США - us-central1)
-        const firebaseConfig = {
-            apiKey: "AIzaSyCoGUBldo9MlMEylcJSAL7xQVFf9bsB3XA",
-            authDomain: "quoridor-us.firebaseapp.com",
-            databaseURL: "https://firebaseio.com",
-            projectId: "quoridor-us",
-            storageBucket: "quoridor-us.firebasestorage.app",
-            messagingSenderId: "13462363537",
-            appId: "1:13462363537:web:7b7459bd55eb79201bce30",
-            measurementId: "G-2H6480RZFZ"
-        };
+        // Полностью настроенная конфигурация вашего проекта Supabase
+        const SUPABASE_URL = "https://supabase.co";
+        const SUPABASE_KEY = "sb_publishable_C44fvGvSPNnElOFZ0WAyDQ_nZniiuw1";
 
-        let database = null;
-        let roomRef = null;
-        
-        // Безопасный запуск и инициализация базы данных Google
+        let supabase = null;
+        let currentRoomId = null;
+        let channel = null;
+
+        // Инициализация клиента Supabase
         try {
-            if (typeof firebase !== 'undefined') {
-                firebase.initializeApp(firebaseConfig);
-                database = firebase.database();
+            if (typeof supabasejs !== 'undefined') {
+                supabase = supabasejs.createClient(SUPABASE_URL, SUPABASE_KEY);
             }
         } catch (e) {
-            console.log("Firebase заблокирован локальным протоколом, включен автономный режим.");
+            console.log("Supabase заблокирован локально, включен автономный режим.");
         }
 
         let state = {
@@ -150,6 +138,7 @@
             state.maxWalls = parseInt(document.getElementById('cfg-walls').value);
             startOnlineMatch();
         }
+
 
         function initOnlineGame(isHost) {
             const statusLabel = document.getElementById('menu-status');
